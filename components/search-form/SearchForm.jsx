@@ -43,11 +43,11 @@ import {
   useState,
 } from "react";
 import {
-  Controller,
   useForm,
-  useFormState,
   useWatch,
 } from "react-hook-form";
+import ControlledFormItem from "../form/ControlledFormItem";
+import SearchConditionSummary from "./SearchConditionSummary";
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
@@ -191,6 +191,19 @@ function formatMinimumViews(value) {
     : `${Number(value).toLocaleString()}회 이상`;
 }
 
+function SearchCategory({ label, children }) {
+  return (
+    <Col span={24} className="flex-group">
+      <div className="category-name">{label}</div>
+      <Row className="category-list">
+        <Col span={24} className="category-item">
+          {children}
+        </Col>
+      </Row>
+    </Col>
+  );
+}
+
 function SearchField({
   name,
   label,
@@ -199,11 +212,8 @@ function SearchField({
   formatValue,
   rules,
   children,
-  wide = false,
 }) {
   const registry = useContext(PreviewRegistryContext);
-  const { errors } = useFormState({ control, name });
-  const fieldError = errors[name];
 
   useEffect(() => {
     return registry.register({
@@ -215,27 +225,16 @@ function SearchField({
   }, [formatValue, label, name, options, registry]);
 
   return (
-    <Col xs={24} lg={wide ? 24 : 12} xxl={wide ? 16 : 8} className="flex-group">
-      <div className="category-name">{label}</div>
-      <Row className="category-list">
-        <Col span={24} className="category-item">
-          <Form.Item
-            className="search-form-item"
-            validateStatus={fieldError ? "error" : undefined}
-            help={fieldError?.message}
-          >
-            <Controller
-              name={name}
-              control={control}
-              rules={rules}
-              render={({ field, fieldState }) =>
-                children({ field, options, fieldState })
-              }
-            />
-          </Form.Item>
-        </Col>
-      </Row>
-    </Col>
+    <ControlledFormItem
+      name={name}
+      control={control}
+      rules={rules}
+      formItemClassName="search-form-item"
+    >
+      {({ field, fieldState }) =>
+        children({ field, options, fieldState })
+      }
+    </ControlledFormItem>
   );
 }
 
@@ -272,22 +271,6 @@ const resultColumns = [
     title: "등록일",
     dataIndex: "registeredAt",
     width: 120,
-  },
-];
-
-const previewColumns = [
-  {
-    title: "조건명",
-    dataIndex: "label",
-    key: "label",
-    width: 150,
-    render: (value) => <Text className="preview-label">{value}</Text>,
-  },
-  {
-    title: "선택한 값",
-    dataIndex: "displayValue",
-    key: "displayValue",
-    render: (value) => <Text>{value}</Text>,
   },
 ];
 
@@ -465,207 +448,210 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
           className="search-form"
         >
           <Row gutter={[24, 20]} className="search-form-row">
-            <SearchField
-              name="keyword"
-              label="검색어"
-              control={control}
-              wide
-              rules={{
-                maxLength: {
-                  value: 100,
-                  message: "검색어는 100자 이하로 입력해 주세요.",
-                },
-              }}
-            >
-              {({ field }) => (
-                <Input
-                  {...field}
-                  allowClear
-                  size="large"
-                  prefix={<SearchOutlined className="field-prefix" />}
-                  placeholder="제목, 내용 또는 작성자 검색"
-                  maxLength={100}
-                />
-              )}
-            </SearchField>
-
-            <SearchField
-              name="searchTarget"
-              label="검색 대상"
-              control={control}
-              options={searchTargetOptions}
-            >
-              {({ field, options }) => (
-                <Select
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  options={options}
-                  size="large"
-                  className="field-full"
-                />
-              )}
-            </SearchField>
-
-            <SearchField
-              name="status"
-              label="처리상태"
-              control={control}
-              options={statusOptions}
-              wide
-            >
-              {({ field, options }) => (
-                <Checkbox.Group
-                  value={field.value}
-                  onChange={field.onChange}
-                  options={options}
-                  className="choice-group"
-                />
-              )}
-            </SearchField>
-
-            <SearchField
-              name="visibility"
-              label="공개여부"
-              control={control}
-              options={visibilityOptions}
-              wide
-            >
-              {({ field, options }) => (
-                <Radio.Group
-                  value={field.value}
-                  onChange={(event) => field.onChange(event.target.value)}
-                  options={options}
-                  optionType="button"
-                  buttonStyle="solid"
-                  className="radio-segment"
-                />
-              )}
-            </SearchField>
-
-            <SearchField
-              name="department"
-              label="담당부서"
-              control={control}
-              options={departmentOptions}
-            >
-              {({ field, options }) => (
-                <Select
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="담당부서 전체"
-                  options={options}
-                  size="large"
-                  className="field-full"
-                />
-              )}
-            </SearchField>
-
-            <SearchField
-              name="tags"
-              label="업무 태그"
-              control={control}
-              options={tagOptions}
-              wide
-            >
-              {({ field, options }) => (
-                <Select
-                  mode="multiple"
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  allowClear
-                  placeholder="태그를 선택해 주세요"
-                  options={options}
-                  maxTagCount="responsive"
-                  size="large"
-                  className="field-full"
-                />
-              )}
-            </SearchField>
-
-            <SearchField
-              name="registeredRange"
-              label="등록기간"
-              control={control}
-              wide
-              formatValue={formatDateRange}
-            >
-              {({ field }) => (
-                <RangePicker
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  format="YYYY-MM-DD"
-                  separator="→"
-                  allowClear
-                  size="large"
-                  className="field-full"
-                  prefix={<CalendarOutlined />}
-                  presets={[
-                    {
-                      label: "최근 7일",
-                      value: [dayjs().subtract(6, "day"), dayjs()],
-                    },
-                    {
-                      label: "최근 30일",
-                      value: [dayjs().subtract(29, "day"), dayjs()],
-                    },
-                    {
-                      label: "이번 달",
-                      value: [dayjs().startOf("month"), dayjs().endOf("month")],
-                    },
-                  ]}
-                />
-              )}
-            </SearchField>
-
-            <SearchField
-              name="minimumViews"
-              label="최소 조회수"
-              control={control}
-              formatValue={formatMinimumViews}
-            >
-              {({ field }) => (
-                <InputNumber
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  min={0}
-                  max={9999999}
-                  step={100}
-                  placeholder="제한 없음"
-                  addonAfter="회 이상"
-                  size="large"
-                  className="field-full"
-                />
-              )}
-            </SearchField>
-
-            <SearchField
-              name="hasAttachment"
-              label="첨부파일"
-              control={control}
-              options={attachmentOptions}
-            >
-              {({ field }) => (
-                <Flex align="center" gap={10} className="switch-row">
-                  <Switch
-                    checked={field.value}
-                    onChange={field.onChange}
-                    checkedChildren="포함"
-                    unCheckedChildren="미포함"
+            <SearchCategory label="검색어">
+              <SearchField
+                name="keyword"
+                label="검색어"
+                control={control}
+                rules={{
+                  maxLength: {
+                    value: 100,
+                    message: "검색어는 100자 이하로 입력해 주세요.",
+                  },
+                }}
+              >
+                {({ field }) => (
+                  <Input
+                    {...field}
+                    allowClear
+                    size="large"
+                    prefix={<SearchOutlined className="field-prefix" />}
+                    placeholder="제목, 내용 또는 작성자 검색"
+                    maxLength={100}
                   />
-                  <Text type="secondary">
-                    첨부파일이 있는 게시물만 조회
-                  </Text>
-                </Flex>
-              )}
-            </SearchField>
+                )}
+              </SearchField>
+
+              <SearchField
+                name="searchTarget"
+                label="검색 대상"
+                control={control}
+                options={searchTargetOptions}
+              >
+                {({ field, options }) => (
+                  <Select
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    options={options}
+                    size="large"
+                    className="field-full"
+                  />
+                )}
+              </SearchField>
+            </SearchCategory>
+
+            <SearchCategory label="처리상태">
+              <SearchField
+                name="status"
+                label="처리상태"
+                control={control}
+                options={statusOptions}
+              >
+                {({ field, options }) => (
+                  <Checkbox.Group
+                    value={field.value}
+                    onChange={field.onChange}
+                    options={options}
+                    className="choice-group"
+                  />
+                )}
+              </SearchField>
+
+              <SearchField
+                name="visibility"
+                label="공개여부"
+                control={control}
+                options={visibilityOptions}
+              >
+                {({ field, options }) => (
+                  <Radio.Group
+                    value={field.value}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    options={options}
+                    optionType="button"
+                    buttonStyle="solid"
+                    className="radio-segment"
+                  />
+                )}
+              </SearchField>
+            </SearchCategory>
+
+            <SearchCategory label="분류">
+              <SearchField
+                name="department"
+                label="담당부서"
+                control={control}
+                options={departmentOptions}
+              >
+                {({ field, options }) => (
+                  <Select
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    placeholder="담당부서 전체"
+                    options={options}
+                    size="large"
+                    className="field-full"
+                  />
+                )}
+              </SearchField>
+
+              <SearchField
+                name="tags"
+                label="업무 태그"
+                control={control}
+                options={tagOptions}
+              >
+                {({ field, options }) => (
+                  <Select
+                    mode="multiple"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    allowClear
+                    placeholder="태그를 선택해 주세요"
+                    options={options}
+                    maxTagCount="responsive"
+                    size="large"
+                    className="field-full"
+                  />
+                )}
+              </SearchField>
+            </SearchCategory>
+
+            <SearchCategory label="등록기간">
+              <SearchField
+                name="registeredRange"
+                label="등록기간"
+                control={control}
+                formatValue={formatDateRange}
+              >
+                {({ field }) => (
+                  <RangePicker
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    format="YYYY-MM-DD"
+                    separator="→"
+                    allowClear
+                    size="large"
+                    className="field-full"
+                    prefix={<CalendarOutlined />}
+                    presets={[
+                      {
+                        label: "최근 7일",
+                        value: [dayjs().subtract(6, "day"), dayjs()],
+                      },
+                      {
+                        label: "최근 30일",
+                        value: [dayjs().subtract(29, "day"), dayjs()],
+                      },
+                      {
+                        label: "이번 달",
+                        value: [dayjs().startOf("month"), dayjs().endOf("month")],
+                      },
+                    ]}
+                  />
+                )}
+              </SearchField>
+
+              <SearchField
+                name="minimumViews"
+                label="최소 조회수"
+                control={control}
+                formatValue={formatMinimumViews}
+              >
+                {({ field }) => (
+                  <InputNumber
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    min={0}
+                    max={9999999}
+                    step={100}
+                    placeholder="제한 없음"
+                    addonAfter="회 이상"
+                    size="large"
+                    className="field-full"
+                  />
+                )}
+              </SearchField>
+
+              <SearchField
+                name="hasAttachment"
+                label="첨부파일"
+                control={control}
+                options={attachmentOptions}
+              >
+                {({ field }) => (
+                  <Flex align="center" gap={10} className="switch-row">
+                    <Switch
+                      checked={field.value}
+                      onChange={field.onChange}
+                      checkedChildren="포함"
+                      unCheckedChildren="미포함"
+                    />
+                    <Text type="secondary">
+                      첨부파일이 있는 게시물만 조회
+                    </Text>
+                  </Flex>
+                )}
+              </SearchField>
+            </SearchCategory>
           </Row>
 
           <div className="form-actions">
@@ -785,14 +771,7 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
             />
           </div>
 
-          <Table
-            columns={previewColumns}
-            dataSource={previewRows}
-            pagination={false}
-            size="small"
-            scroll={{ y: 320 }}
-            className="preview-table"
-          />
+          <SearchConditionSummary items={previewRows} />
         </div>
       </Modal>
     </PreviewRegistryContext.Provider>

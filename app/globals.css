@@ -190,15 +190,34 @@ textarea {
 .category-list {
   flex: 1 1 auto;
   min-width: 0;
+  overflow-x: auto;
 }
 
 .category-item {
+  display: flex !important;
+  align-items: flex-start;
   min-width: 0;
 }
 
 .category-item .search-form-item {
-  width: 100%;
+  position: relative;
+  flex: 1 1 0;
+  min-width: 190px;
   margin-bottom: 18px;
+}
+
+.category-item .search-form-item + .search-form-item {
+  margin-left: 34px;
+}
+
+.category-item .search-form-item + .search-form-item::before {
+  position: absolute;
+  top: 10px;
+  left: -21px;
+  color: #98a2b3;
+  content: "/";
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .field-full {
@@ -336,19 +355,30 @@ textarea {
   font-weight: 750;
 }
 
-.preview-table {
+.condition-summary {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 10px;
 }
 
-.preview-table .ant-table-thead > tr > th {
-  background: #f6f8fb;
+.condition-summary .ant-descriptions-view {
+  border: 0;
 }
 
-.preview-label {
+.condition-summary .ant-descriptions-item-label {
+  width: 150px;
   color: #475467;
+  background: #f6f8fb !important;
   font-weight: 700;
+}
+
+.condition-summary .ant-descriptions-item-content {
+  color: var(--ink);
+  background: #ffffff;
+}
+
+.condition-summary-empty {
+  margin-block: 30px 20px;
 }
 
 @media (max-width: 900px) {
@@ -376,6 +406,10 @@ textarea {
 }
 
 @media (max-width: 620px) {
+  .condition-summary .ant-descriptions-item-label {
+    width: 112px;
+  }
+
   .app-shell {
     width: min(100% - 20px, 540px);
     padding: 24px 0 44px;

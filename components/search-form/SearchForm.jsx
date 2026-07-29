@@ -42,7 +42,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Controller, useForm, useWatch } from "react-hook-form";
+import {
+  Controller,
+  useForm,
+  useFormState,
+  useWatch,
+} from "react-hook-form";
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
@@ -197,6 +202,8 @@ function SearchField({
   wide = false,
 }) {
   const registry = useContext(PreviewRegistryContext);
+  const { errors } = useFormState({ control, name });
+  const fieldError = errors[name];
 
   useEffect(() => {
     return registry.register({
@@ -212,19 +219,20 @@ function SearchField({
       <div className="category-name">{label}</div>
       <Row className="category-list">
         <Col span={24} className="category-item">
-          <Controller
-            name={name}
-            control={control}
-            rules={rules}
-            render={({ field, fieldState }) => (
-              <Form.Item
-                validateStatus={fieldState.error ? "error" : undefined}
-                help={fieldState.error?.message}
-              >
-                {children({ field, options, fieldState })}
-              </Form.Item>
-            )}
-          />
+          <Form.Item
+            className="search-form-item"
+            validateStatus={fieldError ? "error" : undefined}
+            help={fieldError?.message}
+          >
+            <Controller
+              name={name}
+              control={control}
+              rules={rules}
+              render={({ field, fieldState }) =>
+                children({ field, options, fieldState })
+              }
+            />
+          </Form.Item>
         </Col>
       </Row>
     </Col>
@@ -456,7 +464,7 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
           onFinish={submitSearch}
           className="search-form"
         >
-          <Row gutter={[24, 20]}>
+          <Row gutter={[24, 20]} className="search-form-row">
             <SearchField
               name="keyword"
               label="검색어"

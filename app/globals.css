@@ -166,6 +166,10 @@ textarea {
   width: 100%;
 }
 
+.search-form-row {
+  width: 100%;
+}
+
 .flex-group {
   display: flex !important;
   min-width: 0;
@@ -192,7 +196,8 @@ textarea {
   min-width: 0;
 }
 
-.category-item .ant-form-item {
+.category-item .search-form-item {
+  width: 100%;
   margin-bottom: 18px;
 }
 

@@ -55,8 +55,9 @@ test("keeps field metadata colocated and removes the starter preview", async () 
   );
   assert.match(
     searchForm,
-    /className="flex-group"[\s\S]*className="category-name"[\s\S]*className="category-list"[\s\S]*className="category-item"[\s\S]*<Form\.Item/,
+    /className="flex-group"[\s\S]*className="category-name"[\s\S]*className="category-list"[\s\S]*className="category-item"[\s\S]*<Form\.Item[\s\S]*className="search-form-item"[\s\S]*<Controller/,
   );
+  assert.match(searchForm, /className="search-form-row"/);
   assert.doesNotMatch(searchForm, /useState\s*\(\s*formData/);
   assert.doesNotMatch(searchForm, /formDataRef/);
 

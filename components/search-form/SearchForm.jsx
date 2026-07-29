@@ -332,17 +332,19 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
   );
 
   const createPreviewRows = useCallback((values) => {
-    return Array.from(registryRef.current.values()).map((fieldMeta) => ({
-      key: fieldMeta.name,
-      name: fieldMeta.name,
-      label: fieldMeta.label,
-      rawValue: values[fieldMeta.name],
-      displayValue: formatFieldValue(
-        values[fieldMeta.name],
-        fieldMeta.options,
-        fieldMeta.formatValue,
-      ),
-    }));
+    return Array.from(registryRef.current.values())
+      .filter((fieldMeta) => !isEmptyValue(values[fieldMeta.name]))
+      .map((fieldMeta) => ({
+        key: fieldMeta.name,
+        name: fieldMeta.name,
+        label: fieldMeta.label,
+        rawValue: values[fieldMeta.name],
+        displayValue: formatFieldValue(
+          values[fieldMeta.name],
+          fieldMeta.options,
+          fieldMeta.formatValue,
+        ),
+      }));
   }, []);
 
   const activeConditionCount = useMemo(() => {

@@ -49,7 +49,16 @@ test("keeps field metadata colocated and removes the starter preview", async () 
   assert.match(searchForm, /field\.onChange/);
   assert.match(searchForm, /getValues\(\)/);
   assert.match(searchForm, /handleSubmit/);
+  assert.match(
+    searchForm,
+    /\.filter\(\(fieldMeta\) => !isEmptyValue\(values\[fieldMeta\.name\]\)\)/,
+  );
+  assert.match(
+    searchForm,
+    /className="flex-group"[\s\S]*className="category-name"[\s\S]*className="category-list"[\s\S]*className="category-item"[\s\S]*<Form\.Item/,
+  );
   assert.doesNotMatch(searchForm, /useState\s*\(\s*formData/);
+  assert.doesNotMatch(searchForm, /formDataRef/);
 
   await assert.rejects(
     access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)),

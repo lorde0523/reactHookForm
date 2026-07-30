@@ -220,6 +220,10 @@ textarea {
   font-weight: 700;
 }
 
+.category-item .search-form-item-labeled::before {
+  top: 40px !important;
+}
+
 .field-full {
   width: 100%;
 }

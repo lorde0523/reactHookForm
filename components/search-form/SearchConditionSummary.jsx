@@ -13,7 +13,7 @@ const { Text } = Typography;
  *
  * 사용 예:
  * <SearchConditionSummary
- *   items={[{ key: "status", label: "처리상태", displayValue: "대기, 완료" }]}
+ *   items={[{ key: "status", label: "처리상태", displayValue: "대기 / 공개" }]}
  * />
  */
 export default function SearchConditionSummary({ items }) {

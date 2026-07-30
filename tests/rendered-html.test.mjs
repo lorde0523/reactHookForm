@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
+import { createSearchConditionRows } from "../components/search-form/createSearchConditionRows.js";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -45,17 +46,14 @@ test("uses one field definition for rendering and saved-condition previews", asy
   );
 
   assert.match(searchForm, /const searchCategories = \[/);
-  assert.match(searchForm, /const fieldConfigs = searchCategories\.flatMap/);
+  assert.match(searchForm, /createSearchConditionRows\(searchCategories, getValues\(\)\)/);
   assert.match(searchForm, /searchCategories\.map/);
   assert.match(searchForm, /category\.fields\.map/);
-  assert.match(searchForm, /formatFieldValue/);
+  assert.match(searchForm, /import \{[\s\S]*createSearchConditionRows[\s\S]*isEmptyValue/);
   assert.match(searchForm, /field\.onChange/);
   assert.match(searchForm, /getValues\(\)/);
   assert.match(searchForm, /handleSubmit/);
-  assert.match(
-    searchForm,
-    /\.filter\(\(fieldConfig\) => !isEmptyValue\(values\[fieldConfig\.name\]\)\)/,
-  );
+  assert.match(searchForm, /label=\{fieldConfig\.label\}/);
   assert.match(
     searchForm,
     /className="flex-group"[\s\S]*className="category-name"[\s\S]*className="category-list"[\s\S]*className="category-item"[\s\S]*<Controller/,
@@ -139,4 +137,73 @@ test("keeps multiple form items in one category item with slash separators", asy
     /\.search-form-item \+ \.search-form-item::before/,
   );
   assert.match(css, /content:\s*"\/"/);
+});
+
+test("groups unlabeled form items under the category label with slash-separated values", () => {
+  const categories = [
+    {
+      key: "keyword-category",
+      categoryLabel: "검색어",
+      fields: [
+        { name: "keyword" },
+        {
+          name: "searchTarget",
+          options: [
+            { label: "제목 + 내용", value: "TITLE_CONTENT" },
+          ],
+        },
+      ],
+    },
+  ];
+
+  assert.deepEqual(
+    createSearchConditionRows(categories, {
+      keyword: "장애 대응",
+      searchTarget: "TITLE_CONTENT",
+    }),
+    [
+      {
+        key: "keyword-category-default-item-unlabeled",
+        names: ["keyword", "searchTarget"],
+        label: "검색어",
+        rawValues: {
+          keyword: "장애 대응",
+          searchTarget: "TITLE_CONTENT",
+        },
+        displayValue: "장애 대응 / 제목 + 내용",
+      },
+    ],
+  );
+});
+
+test("uses each Form.Item label for labeled fields", () => {
+  const categories = [
+    {
+      key: "classification-category",
+      categoryLabel: "분류",
+      fields: [
+        {
+          name: "department",
+          label: "담당부서",
+          options: [{ label: "플랫폼개발팀", value: "PLATFORM_DEV" }],
+        },
+        {
+          name: "tags",
+          label: "업무 태그",
+          options: [{ label: "장애", value: "INCIDENT" }],
+        },
+      ],
+    },
+  ];
+
+  assert.deepEqual(
+    createSearchConditionRows(categories, {
+      department: "PLATFORM_DEV",
+      tags: ["INCIDENT"],
+    }).map(({ label, displayValue }) => ({ label, displayValue })),
+    [
+      { label: "담당부서", displayValue: "플랫폼개발팀" },
+      { label: "업무 태그", displayValue: "장애" },
+    ],
+  );
 });

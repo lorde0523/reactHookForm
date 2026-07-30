@@ -42,6 +42,10 @@ import {
   useForm,
   useWatch,
 } from "react-hook-form";
+import {
+  createSearchConditionRows,
+  isEmptyValue,
+} from "./createSearchConditionRows";
 import SearchConditionSummary from "./SearchConditionSummary";
 
 const { RangePicker } = DatePicker;
@@ -140,53 +144,6 @@ const statusColor = {
   반려: "red",
 };
 
-/**
- * 저장 확인 목록에서 제외할 "입력되지 않은 값"의 공통 기준이다.
- * false와 0은 사용자가 선택할 수 있는 유효한 값이므로 빈 값으로 처리하지 않는다.
- */
-function isEmptyValue(value) {
-  return (
-    value === undefined ||
-    value === null ||
-    value === "" ||
-    (Array.isArray(value) && value.length === 0)
-  );
-}
-
-// Select/Checkbox/Radio가 보관하는 실제 값(value)을 화면 표시값(label)으로 바꾼다.
-// String 비교를 사용해 true/false 같은 값도 options와 안정적으로 매칭한다.
-function findOptionLabel(options, value) {
-  return (
-    options?.find((option) => String(option.value) === String(value))?.label ??
-    String(value)
-  );
-}
-
-/**
- * RHF 원본 값을 저장 확인 화면용 문자열로 변환한다.
- * 변환 우선순위는 필드별 formatValue → options 라벨 → 원본 문자열이다.
- * 배열 값은 Checkbox.Group, 다중 Select처럼 여러 항목을 선택한 경우를 처리한다.
- */
-function formatFieldValue(value, options, customFormatter) {
-  if (isEmptyValue(value)) {
-    return "전체";
-  }
-
-  if (customFormatter) {
-    return customFormatter(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => findOptionLabel(options, item)).join(", ");
-  }
-
-  if (options?.length) {
-    return findOptionLabel(options, value);
-  }
-
-  return String(value);
-}
-
 function formatDateRange(value) {
   return value?.length === 2
     ? `${value[0].format("YYYY-MM-DD")} ~ ${value[1].format("YYYY-MM-DD")}`
@@ -202,9 +159,9 @@ function formatMinimumViews(value) {
 /**
  * 조회조건 화면의 유일한 구성 정의다.
  *
- * categoryLabel은 화면 왼쪽 카테고리 제목에 사용하고, 각 field의 label은 저장 확인
- * 화면의 조건명으로 사용한다. options는 입력 컴포넌트와 value → label 변환이 함께
- * 사용하므로 별도 미리보기 설정을 만들지 않는다.
+ * categoryLabel은 화면 왼쪽 카테고리 제목과 무라벨 Form.Item의 저장 확인 라벨에
+ * 사용한다. field.label은 실제 Form.Item label이면서 저장 확인 화면의 조건명이다.
+ * label을 생략한 필드는 같은 category-item의 다른 무라벨 필드 값과 "/"로 합쳐진다.
  *
  * render에는 Controller가 제공한 field와 fieldState, 현재 설정의 options가 전달된다.
  * Input은 {...field}로 연결할 수 있지만 Select/DatePicker/Switch 등은 컴포넌트 규격에
@@ -217,7 +174,6 @@ const searchCategories = [
     fields: [
       {
         name: "keyword",
-        label: "검색어",
         rules: {
           maxLength: {
             value: 100,
@@ -237,7 +193,6 @@ const searchCategories = [
       },
       {
         name: "searchTarget",
-        label: "검색 대상",
         options: searchTargetOptions,
         render: ({ field, options }) => (
           <Select
@@ -258,7 +213,6 @@ const searchCategories = [
     fields: [
       {
         name: "status",
-        label: "처리상태",
         options: statusOptions,
         render: ({ field, options }) => (
           <Checkbox.Group
@@ -271,7 +225,6 @@ const searchCategories = [
       },
       {
         name: "visibility",
-        label: "공개여부",
         options: visibilityOptions,
         render: ({ field, options }) => (
           <Radio.Group
@@ -407,26 +360,6 @@ const searchCategories = [
   },
 ];
 
-// 화면 반복 출력과 저장 미리보기가 같은 필드 객체를 사용한다.
-// flatMap 결과는 모듈 로드 시 한 번만 만들어지며 사용자 입력값을 보관하지 않는다.
-const fieldConfigs = searchCategories.flatMap((category) => category.fields);
-
-function createPreviewRows(values) {
-  return fieldConfigs
-    .filter((fieldConfig) => !isEmptyValue(values[fieldConfig.name]))
-    .map((fieldConfig) => ({
-      key: fieldConfig.name,
-      name: fieldConfig.name,
-      label: fieldConfig.label,
-      rawValue: values[fieldConfig.name],
-      displayValue: formatFieldValue(
-        values[fieldConfig.name],
-        fieldConfig.options,
-        fieldConfig.formatValue,
-      ),
-    }));
-}
-
 const resultColumns = [
   {
     title: "관리번호",
@@ -555,7 +488,7 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
   const openSaveModal = () => {
     // 버튼을 누른 순간의 RHF 스냅샷으로 미리보기를 고정한다.
     // 모달 렌더링을 위해 폼 전체를 watch하지 않아도 되므로 불필요한 재렌더링을 줄인다.
-    setPreviewRows(createPreviewRows(getValues()));
+    setPreviewRows(createSearchConditionRows(searchCategories, getValues()));
     setConditionName("");
     setSaveModalOpen(true);
   };
@@ -572,8 +505,8 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
     const payload = {
       name: trimmedName,
       values,
-      displayValues: previewRows.map(({ name, label, displayValue }) => ({
-        name,
+      displayValues: previewRows.map(({ names, label, displayValue }) => ({
+        names,
         label,
         displayValue,
       })),
@@ -652,7 +585,11 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
                         rules={fieldConfig.rules}
                         render={({ field, fieldState }) => (
                           <Form.Item
-                            className="search-form-item"
+                            label={fieldConfig.label}
+                            className={[
+                              "search-form-item",
+                              fieldConfig.label && "search-form-item-labeled",
+                            ].filter(Boolean).join(" ")}
                             validateStatus={
                               fieldState.invalid ? "error" : undefined
                             }

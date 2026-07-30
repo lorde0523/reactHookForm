@@ -15,8 +15,9 @@ React Hook Form을 폼 데이터의 유일한 상태로 사용하는 실무형 �
 ## 핵심 구조
 
 `searchCategories` 객체가 카테고리 레이아웃, RHF 필드 연결, 저장 확인 화면의
-표시 정보를 함께 관리합니다. `label`과 `options`는 입력 컴포넌트와 저장 확인
-화면에서 재사용되므로 같은 옵션을 다른 설정에 다시 작성하지 않습니다.
+표시 정보를 함께 관리합니다. `label`은 실제 `Form.Item`의 라벨로도 사용되고,
+`options`는 입력 컴포넌트와 저장 확인 화면에서 재사용되므로 같은 옵션을 다른
+설정에 다시 작성하지 않습니다.
 
 ```jsx
 {
@@ -51,6 +52,7 @@ Hook 호출 순서 규칙도 지킬 수 있습니다.
             rules={fieldConfig.rules}
             render={({ field, fieldState }) => (
               <Form.Item
+                label={fieldConfig.label}
                 className="search-form-item"
                 validateStatus={fieldState.invalid ? "error" : undefined}
                 help={fieldState.error?.message}
@@ -68,6 +70,24 @@ Hook 호출 순서 규칙도 지킬 수 있습니다.
     </Row>
   </Col>
 ))}
+```
+
+`label`이 있는 필드는 저장 확인 화면에서 해당 라벨로 독립된 행을 만듭니다.
+`label`을 생략한 필드가 같은 `category-item`에 여러 개 있으면 최상위
+`categoryLabel`을 왼쪽 라벨로 사용하고 각 값을 `/`로 연결합니다.
+
+```jsx
+{
+  key: "keyword-category",
+  categoryLabel: "검색어",
+  fields: [
+    { name: "keyword", render: /* Input */ },
+    { name: "searchTarget", render: /* Select */ },
+  ],
+}
+
+// 저장 확인 결과
+// 검색어 | 장애 대응 / 제목 + 내용
 ```
 
 값은 모두 RHF에서 조회합니다.
@@ -101,9 +121,9 @@ const submitSearch = handleSubmit((data) => {
   },
   displayValues: [
     {
-      name: "status",
+      names: ["status", "visibility"],
       label: "처리상태",
-      displayValue: "대기, 처리중"
+      displayValue: "대기, 처리중 / 전체"
     }
   ],
   savedAt: "2026-07-30T..."

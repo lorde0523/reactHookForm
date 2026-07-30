@@ -14,6 +14,12 @@ React Hook Form을 폼 데이터의 유일한 상태로 사용하는 실무형 �
 
 ## 핵심 구조
 
+기존 일괄 설정 기반 저장 로직을 `FormProvider`와 렌더링된 FormItem의 메타데이터
+등록 방식으로 전환하려면
+[조회조건 저장 로직 Provider 방식 마이그레이션 가이드](docs/search-condition-provider-migration.md)를
+참고하세요. 기본/스타일 FormItem 비교, 단일 Checkbox, DatePicker, 서버 데이터
+반영, 저장 모달 snapshot 및 API payload까지 단계별 코드로 정리되어 있습니다.
+
 `searchCategories` 객체가 카테고리 레이아웃, RHF 필드 연결, 저장 확인 화면의
 표시 정보를 함께 관리합니다. `label`은 실제 `Form.Item`의 라벨로도 사용되고,
 `options`는 입력 컴포넌트와 저장 확인 화면에서 재사용되므로 같은 옵션을 다른

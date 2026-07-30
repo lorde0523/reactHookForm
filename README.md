@@ -5,7 +5,7 @@ React Hook Form을 폼 데이터의 유일한 상태로 사용하는 실무형 �
 
 ## 제공 기능
 
-- Input, Select, Multi Select, Checkbox, Radio, Date Range, InputNumber, Switch
+- Input, Select, Multi Select, Checkbox, Radio, Date Range, InputNumber
 - `Controller`를 통한 Ant Design 컴포넌트 제어
 - 조회, 초기화, 유효성 검사
 - 현재 조회조건의 표시 라벨을 보여주는 저장 확인 모달
@@ -14,16 +14,16 @@ React Hook Form을 폼 데이터의 유일한 상태로 사용하는 실무형 �
 
 ## 핵심 구조
 
-기존 일괄 설정 기반 저장 로직을 `FormProvider`와 렌더링된 FormItem의 메타데이터
-등록 방식으로 전환하려면
+현재 구현은 `FormProvider`와 렌더링된 FormItem의 메타데이터 등록 방식을 사용합니다.
+레거시 일괄 설정 방식에서 전환하는 전체 과정은
 [조회조건 저장 로직 Provider 방식 마이그레이션 가이드](docs/search-condition-provider-migration.md)를
 참고하세요. 기본/스타일 FormItem 비교, 단일 Checkbox, DatePicker, 서버 데이터
 반영, 저장 모달 snapshot 및 API payload까지 단계별 코드로 정리되어 있습니다.
 
-`searchCategories` 객체가 카테고리 레이아웃, RHF 필드 연결, 저장 확인 화면의
-표시 정보를 함께 관리합니다. `label`은 실제 `Form.Item`의 라벨로도 사용되고,
-`options`는 입력 컴포넌트와 저장 확인 화면에서 재사용되므로 같은 옵션을 다른
-설정에 다시 작성하지 않습니다.
+`searchCategories`는 화면 반복 렌더링을 담당하고, 실제로 렌더링된
+`ConditionFormItem`은 `label`, `options`, `formatValue` 메타데이터를
+`ConditionCollectorProvider`에 등록합니다. 필드 값은 복제하지 않으며 저장 모달을
+여는 순간 RHF의 `getValues()`로 최신 값을 읽습니다.
 
 ```jsx
 {
@@ -40,41 +40,52 @@ React Hook Form을 폼 데이터의 유일한 상태로 사용하는 실무형 �
 }
 ```
 
-표시부에서는 카테고리와 필드를 반복하면서 `Controller`를 렌더링합니다.
-반복문 안에서 Hook을 호출하지 않고 `<Controller>` 컴포넌트를 사용하므로 React의
-Hook 호출 순서 규칙도 지킬 수 있습니다.
+폼 전체는 `FormProvider`와 `ConditionCollectorProvider`로 감쌉니다.
+
+```jsx
+<FormProvider {...methods}>
+  <ConditionCollectorProvider>
+    <SearchFormContent />
+  </ConditionCollectorProvider>
+</FormProvider>
+```
+
+표시부에서는 기존 DOM 구조를 유지하면서 카테고리 경계와 FormItem을 등록합니다.
 
 ```jsx
 {searchCategories.map((category) => (
-  <Col key={category.key} className="flex-group">
-    <div className="category-name">{category.categoryLabel}</div>
-    <Row className="category-list">
-      <Col className="category-item">
-        {category.fields.map((fieldConfig) => (
-          <Controller
-            key={fieldConfig.name}
-            name={fieldConfig.name}
-            control={control}
-            rules={fieldConfig.rules}
-            render={({ field, fieldState }) => (
-              <Form.Item
-                label={fieldConfig.label}
-                className="search-form-item"
-                validateStatus={fieldState.invalid ? "error" : undefined}
-                help={fieldState.error?.message}
-              >
-                {fieldConfig.render({
-                  field,
-                  fieldState,
-                  options: fieldConfig.options,
-                })}
-              </Form.Item>
-            )}
-          />
-        ))}
-      </Col>
-    </Row>
-  </Col>
+  <ConditionCategory
+    key={category.key}
+    categoryKey={category.key}
+    label={category.categoryLabel}
+  >
+    <Col className="flex-group">
+      <div className="category-name">{category.categoryLabel}</div>
+      <Row className="category-list">
+        <ConditionCategoryItem itemKey="default">
+          <Col className="category-item">
+            {category.fields.map((fieldConfig) => (
+              <Controller
+                key={fieldConfig.name}
+                name={fieldConfig.name}
+                control={control}
+                render={({ field }) => (
+                  <ConditionFormItem
+                    fieldName={fieldConfig.name}
+                    label={fieldConfig.label}
+                    options={fieldConfig.options}
+                    formatValue={fieldConfig.formatValue}
+                  >
+                    {fieldConfig.render({ field })}
+                  </ConditionFormItem>
+                )}
+              />
+            ))}
+          </Col>
+        </ConditionCategoryItem>
+      </Row>
+    </Col>
+  </ConditionCategory>
 ))}
 ```
 
@@ -96,12 +107,12 @@ Hook 호출 순서 규칙도 지킬 수 있습니다.
 // 검색어 | 장애 대응 / 제목 + 내용
 ```
 
-값은 모두 RHF에서 조회합니다.
+모달을 열 때 원본 값과 표시용 값을 같은 시점의 snapshot으로 고정합니다.
 
 ```jsx
-const values = getValues();
-const submitSearch = handleSubmit((data) => {
-  // 조회 API 호출
+setConditionSnapshot({
+  rawValues: toSerializableValues(getValues()),
+  displayValues: collect(),
 });
 ```
 

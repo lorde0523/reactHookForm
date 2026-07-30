@@ -2,7 +2,13 @@
 
 ## 1. 문서 목적
 
-현재 프로젝트는 `searchCategories` 전체 설정과 RHF의 `getValues()`를
+현재 저장소에는 이 문서의 목표 구조가
+[`ConditionCollector.jsx`](../components/search-form/ConditionCollector.jsx),
+[`ConditionFormItem.jsx`](../components/search-form/ConditionFormItem.jsx),
+[`createConditionDisplayRows.js`](../components/search-form/createConditionDisplayRows.js)에
+구현되어 있다.
+
+마이그레이션 전 레거시 버전은 `searchCategories` 전체 설정과 RHF의 `getValues()`를
 `createSearchConditionRows()`에 함께 전달해 조회조건 저장 모달용 데이터를 만든다.
 
 ```jsx
@@ -95,11 +101,11 @@ setPreviewRows(
 
 ---
 
-## 3. 현재 코드와 목표 코드 비교
+## 3. 레거시 코드와 적용 코드 비교
 
-### 3.1 현재 방식
+### 3.1 레거시 방식
 
-현재 `SearchForm.jsx`는 화면 렌더링, 필드 메타데이터, 모달 표시 데이터가
+레거시 `SearchForm.jsx`는 화면 렌더링, 필드 메타데이터, 모달 표시 데이터가
 `searchCategories`에 함께 들어 있다.
 
 ```jsx
@@ -140,7 +146,7 @@ const openSaveModal = () => {
 };
 ```
 
-### 3.2 목표 방식
+### 3.2 적용된 Provider 방식
 
 각 FormItem이 렌더링될 때 다음 메타데이터만 Provider에 등록한다.
 
@@ -489,7 +495,11 @@ export default function ConditionFormItem({
   children,
   ...formItemProps
 }) {
-  const location = useConditionLocation();
+  const {
+    categoryKey,
+    categoryLabel,
+    itemKey,
+  } = useConditionLocation();
   const {
     register,
   } = useConditionCollector();
@@ -531,16 +541,18 @@ export default function ConditionFormItem({
       checkedLabel: resolvedCheckedLabel,
       options,
       formatValue,
-      ...location,
+      categoryKey,
+      categoryLabel,
+      itemKey,
     });
   }, [
+    categoryKey,
+    categoryLabel,
     controlType,
     displayLabel,
     fieldName,
     formatValue,
-    location.categoryKey,
-    location.categoryLabel,
-    location.itemKey,
+    itemKey,
     options,
     register,
     resolvedCheckedLabel,
@@ -1839,4 +1851,3 @@ RHF는 언마운트된 필드 값을 기본적으로 유지할 수 있다. 화�
 - 서버 데이터는 `reset()` 또는 `setValue()`로 RHF에 반영된다.
 - 모달은 메타데이터가 아니라 변환 완료된 `displayValues`를 받는다.
 - 저장 payload는 `values`와 `displayValues`를 분리한다.
-

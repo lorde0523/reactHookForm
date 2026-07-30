@@ -26,7 +26,6 @@ import {
   Row,
   Select,
   Space,
-  Switch,
   Table,
   Tag,
   Typography,
@@ -39,13 +38,19 @@ import {
 } from "react";
 import {
   Controller,
+  FormProvider,
   useForm,
+  useFormContext,
   useWatch,
 } from "react-hook-form";
 import {
-  createSearchConditionRows,
-  isEmptyValue,
-} from "./createSearchConditionRows";
+  ConditionCategory,
+  ConditionCategoryItem,
+  ConditionCollectorProvider,
+  useConditionCollector,
+} from "./ConditionCollector";
+import ConditionFormItem from "./ConditionFormItem";
+import { isEmptyValue } from "./createConditionDisplayRows";
 import SearchConditionSummary from "./SearchConditionSummary";
 
 const { RangePicker } = DatePicker;
@@ -86,11 +91,6 @@ const tagOptions = [
   { label: "배포", value: "RELEASE" },
   { label: "정책", value: "POLICY" },
   { label: "문의", value: "QUESTION" },
-];
-
-const attachmentOptions = [
-  { label: "포함", value: true },
-  { label: "미포함", value: false },
 ];
 
 // RHF가 조회조건 값의 유일한 상태 저장소다.
@@ -164,7 +164,7 @@ function formatMinimumViews(value) {
  * label을 생략한 필드는 같은 category-item의 다른 무라벨 필드 값과 "/"로 합쳐진다.
  *
  * render에는 Controller가 제공한 field와 fieldState, 현재 설정의 options가 전달된다.
- * Input은 {...field}로 연결할 수 있지만 Select/DatePicker/Switch 등은 컴포넌트 규격에
+ * Input은 {...field}로 연결할 수 있지만 Select/DatePicker/Checkbox 등은 컴포넌트 규격에
  * 맞춰 value 또는 checked와 field.onChange를 명시적으로 연결한다.
  */
 const searchCategories = [
@@ -341,19 +341,15 @@ const searchCategories = [
       {
         name: "hasAttachment",
         label: "첨부파일",
-        options: attachmentOptions,
+        controlType: "single-checkbox",
         render: ({ field }) => (
-          <Flex align="center" gap={10} className="switch-row">
-            <Switch
-              checked={field.value}
-              onChange={field.onChange}
-              checkedChildren="포함"
-              unCheckedChildren="미포함"
-            />
-            <Text type="secondary">
-              첨부파일이 있는 게시물만 조회
-            </Text>
-          </Flex>
+          <Checkbox
+            checked={Boolean(field.value)}
+            onChange={(event) => field.onChange(event.target.checked)}
+            onBlur={field.onBlur}
+          >
+            첨부파일이 있는 게시물만 조회
+          </Checkbox>
         ),
       },
     ],
@@ -404,6 +400,10 @@ const resultColumns = [
 function toSerializableValues(values) {
   return Object.fromEntries(
     Object.entries(values).map(([key, value]) => {
+      if (dayjs.isDayjs(value)) {
+        return [key, value.format("YYYY-MM-DD")];
+      }
+
       if (Array.isArray(value) && value.every((item) => dayjs.isDayjs(item))) {
         return [key, value.map((item) => item.format("YYYY-MM-DD"))];
       }
@@ -427,13 +427,34 @@ function toSerializableValues(values) {
  * 저장 시각이 전달된다. 두 콜백을 생략하면 현재 예제용 조회/저장 동작으로 실행된다.
  */
 export default function SearchForm({ onSearch, onSaveCondition }) {
+  const methods = useForm({
+    defaultValues,
+  });
+
+  return (
+    <FormProvider {...methods}>
+      <ConditionCollectorProvider>
+        <SearchFormContent
+          onSearch={onSearch}
+          onSaveCondition={onSaveCondition}
+        />
+      </ConditionCollectorProvider>
+    </FormProvider>
+  );
+}
+
+function SearchFormContent({ onSearch, onSaveCondition }) {
   const [messageApi, contextHolder] = message.useMessage();
+  const { collect } = useConditionCollector();
 
   // 아래 state는 모달 열림, 로딩, 결과처럼 일시적인 화면 UI 상태다.
   // 조회조건 필드 값은 포함하지 않으며 RHF가 계속 단독으로 관리한다.
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [conditionName, setConditionName] = useState("");
-  const [previewRows, setPreviewRows] = useState([]);
+  const [conditionSnapshot, setConditionSnapshot] = useState({
+    rawValues: null,
+    displayValues: [],
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [lastSearch, setLastSearch] = useState(null);
   const [savedConditions, setSavedConditions] = useState([]);
@@ -445,9 +466,7 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
     getValues,
     reset,
     formState: { isSubmitting },
-  } = useForm({
-    defaultValues,
-  });
+  } = useFormContext();
 
   // 화면 상단의 적용 조건 개수처럼 입력 즉시 갱신되어야 하는 UI만 구독한다.
   // 실제 조회/저장 시점의 전체 값은 불필요한 렌더링 없이 handleSubmit/getValues로 읽는다.
@@ -487,8 +506,11 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
 
   const openSaveModal = () => {
     // 버튼을 누른 순간의 RHF 스냅샷으로 미리보기를 고정한다.
-    // 모달 렌더링을 위해 폼 전체를 watch하지 않아도 되므로 불필요한 재렌더링을 줄인다.
-    setPreviewRows(createSearchConditionRows(searchCategories, getValues()));
+    // collect는 렌더링된 FormItem 메타데이터와 RHF 최신 값을 결합한다.
+    setConditionSnapshot({
+      rawValues: toSerializableValues(getValues()),
+      displayValues: collect(),
+    });
     setConditionName("");
     setSaveModalOpen(true);
   };
@@ -501,15 +523,18 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
       return;
     }
 
-    const values = toSerializableValues(getValues());
+    const values =
+      conditionSnapshot.rawValues ?? toSerializableValues(getValues());
     const payload = {
       name: trimmedName,
       values,
-      displayValues: previewRows.map(({ names, label, displayValue }) => ({
-        names,
-        label,
-        displayValue,
-      })),
+      displayValues: conditionSnapshot.displayValues.map(
+        ({ names, label, displayValue }) => ({
+          names,
+          label,
+          displayValue,
+        }),
+      ),
       savedAt: dayjs().toISOString(),
     };
 
@@ -570,43 +595,56 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
         >
           <Row gutter={[24, 20]} className="search-form-row">
             {searchCategories.map((category) => (
-              <Col key={category.key} span={24} className="flex-group">
-                <div className="category-name">
-                  {category.categoryLabel}
-                </div>
+              <ConditionCategory
+                key={category.key}
+                categoryKey={category.key}
+                label={category.categoryLabel}
+              >
+                <Col span={24} className="flex-group">
+                  <div className="category-name">
+                    {category.categoryLabel}
+                  </div>
 
-                <Row className="category-list">
-                  <Col span={24} className="category-item">
-                    {category.fields.map((fieldConfig) => (
-                      <Controller
-                        key={fieldConfig.name}
-                        name={fieldConfig.name}
-                        control={control}
-                        rules={fieldConfig.rules}
-                        render={({ field, fieldState }) => (
-                          <Form.Item
-                            label={fieldConfig.label}
-                            className={[
-                              "search-form-item",
-                              fieldConfig.label && "search-form-item-labeled",
-                            ].filter(Boolean).join(" ")}
-                            validateStatus={
-                              fieldState.invalid ? "error" : undefined
-                            }
-                            help={fieldState.error?.message}
-                          >
-                            {fieldConfig.render({
-                              field,
-                              fieldState,
-                              options: fieldConfig.options,
-                            })}
-                          </Form.Item>
-                        )}
-                      />
-                    ))}
-                  </Col>
-                </Row>
-              </Col>
+                  <Row className="category-list">
+                    <ConditionCategoryItem itemKey="default">
+                      <Col span={24} className="category-item">
+                        {category.fields.map((fieldConfig) => (
+                          <Controller
+                            key={fieldConfig.name}
+                            name={fieldConfig.name}
+                            control={control}
+                            rules={fieldConfig.rules}
+                            render={({ field, fieldState }) => (
+                              <ConditionFormItem
+                                fieldName={fieldConfig.name}
+                                label={fieldConfig.label}
+                                controlType={fieldConfig.controlType}
+                                options={fieldConfig.options}
+                                formatValue={fieldConfig.formatValue}
+                                className={[
+                                  "search-form-item",
+                                  fieldConfig.label &&
+                                    "search-form-item-labeled",
+                                ].filter(Boolean).join(" ")}
+                                validateStatus={
+                                  fieldState.invalid ? "error" : undefined
+                                }
+                                help={fieldState.error?.message}
+                              >
+                                {fieldConfig.render({
+                                  field,
+                                  fieldState,
+                                  options: fieldConfig.options,
+                                })}
+                              </ConditionFormItem>
+                            )}
+                          />
+                        ))}
+                      </Col>
+                    </ConditionCategoryItem>
+                  </Row>
+                </Col>
+              </ConditionCategory>
             ))}
           </Row>
 
@@ -727,7 +765,7 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
             />
           </div>
 
-          <SearchConditionSummary items={previewRows} />
+          <SearchConditionSummary items={conditionSnapshot.displayValues} />
         </div>
       </Modal>
     </>

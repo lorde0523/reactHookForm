@@ -255,10 +255,6 @@ textarea {
   text-align: center;
 }
 
-.switch-row {
-  min-height: 40px;
-}
-
 .form-actions {
   display: flex;
   justify-content: flex-end;

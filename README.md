@@ -14,25 +14,60 @@ React Hook Form을 폼 데이터의 유일한 상태로 사용하는 실무형 �
 
 ## 핵심 구조
 
-`SearchField`에 전달한 `label`과 `options`는 입력 컴포넌트와 저장 확인
-테이블에서 함께 사용됩니다. 별도의 `searchConfig`에 같은 옵션을 다시 작성하지
-않습니다.
+`searchCategories` 객체가 카테고리 레이아웃, RHF 필드 연결, 저장 확인 화면의
+표시 정보를 함께 관리합니다. `label`과 `options`는 입력 컴포넌트와 저장 확인
+화면에서 재사용되므로 같은 옵션을 다른 설정에 다시 작성하지 않습니다.
 
 ```jsx
-<SearchField
-  name="status"
-  label="처리상태"
-  control={control}
-  options={statusOptions}
->
-  {({ field, options }) => (
+{
+  name: "status",
+  label: "처리상태",
+  options: statusOptions,
+  render: ({ field, options }) => (
     <Checkbox.Group
       value={field.value}
       onChange={field.onChange}
       options={options}
     />
-  )}
-</SearchField>
+  ),
+}
+```
+
+표시부에서는 카테고리와 필드를 반복하면서 `Controller`를 렌더링합니다.
+반복문 안에서 Hook을 호출하지 않고 `<Controller>` 컴포넌트를 사용하므로 React의
+Hook 호출 순서 규칙도 지킬 수 있습니다.
+
+```jsx
+{searchCategories.map((category) => (
+  <Col key={category.key} className="flex-group">
+    <div className="category-name">{category.categoryLabel}</div>
+    <Row className="category-list">
+      <Col className="category-item">
+        {category.fields.map((fieldConfig) => (
+          <Controller
+            key={fieldConfig.name}
+            name={fieldConfig.name}
+            control={control}
+            rules={fieldConfig.rules}
+            render={({ field, fieldState }) => (
+              <Form.Item
+                className="search-form-item"
+                validateStatus={fieldState.invalid ? "error" : undefined}
+                help={fieldState.error?.message}
+              >
+                {fieldConfig.render({
+                  field,
+                  fieldState,
+                  options: fieldConfig.options,
+                })}
+              </Form.Item>
+            )}
+          />
+        ))}
+      </Col>
+    </Row>
+  </Col>
+))}
 ```
 
 값은 모두 RHF에서 조회합니다.

@@ -38,26 +38,30 @@ test("server-renders the practical search form", async () => {
   assert.doesNotMatch(html, /codex-preview|Building your site/);
 });
 
-test("keeps field metadata colocated and removes the starter preview", async () => {
+test("uses one field definition for rendering and saved-condition previews", async () => {
   const searchForm = await readFile(
     new URL("../components/search-form/SearchForm.jsx", import.meta.url),
     "utf8",
   );
 
-  assert.match(searchForm, /PreviewRegistryContext/);
+  assert.match(searchForm, /const searchCategories = \[/);
+  assert.match(searchForm, /const fieldConfigs = searchCategories\.flatMap/);
+  assert.match(searchForm, /searchCategories\.map/);
+  assert.match(searchForm, /category\.fields\.map/);
   assert.match(searchForm, /formatFieldValue/);
   assert.match(searchForm, /field\.onChange/);
   assert.match(searchForm, /getValues\(\)/);
   assert.match(searchForm, /handleSubmit/);
   assert.match(
     searchForm,
-    /\.filter\(\(fieldMeta\) => !isEmptyValue\(values\[fieldMeta\.name\]\)\)/,
+    /\.filter\(\(fieldConfig\) => !isEmptyValue\(values\[fieldConfig\.name\]\)\)/,
   );
   assert.match(
     searchForm,
-    /className="flex-group"[\s\S]*className="category-name"[\s\S]*className="category-list"[\s\S]*className="category-item"[\s\S]*<ControlledFormItem/,
+    /className="flex-group"[\s\S]*className="category-name"[\s\S]*className="category-list"[\s\S]*className="category-item"[\s\S]*<Controller/,
   );
   assert.match(searchForm, /className="search-form-row"/);
+  assert.doesNotMatch(searchForm, /PreviewRegistryContext|registryRef/);
   assert.doesNotMatch(searchForm, /useState\s*\(\s*formData/);
   assert.doesNotMatch(searchForm, /formDataRef/);
 
@@ -91,31 +95,25 @@ test("renders saved conditions as a reusable label-value summary", async () => {
   assert.doesNotMatch(summary, /<Table|columns=/);
 });
 
-test("reuses one controlled form item for RHF field wiring", async () => {
-  const [searchForm, controlledFormItem] = await Promise.all([
-    readFile(
-      new URL("../components/search-form/SearchForm.jsx", import.meta.url),
-      "utf8",
-    ),
-    readFile(
-      new URL(
-        "../components/form/ControlledFormItem.jsx",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  ]);
+test("renders Controller directly from each configured field", async () => {
+  const searchForm = await readFile(
+    new URL("../components/search-form/SearchForm.jsx", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(searchForm, /import ControlledFormItem/);
-  assert.match(searchForm, /<ControlledFormItem/);
-  assert.match(searchForm, /formItemClassName="search-form-item"/);
-  assert.doesNotMatch(searchForm, /<Controller/);
-  assert.match(controlledFormItem, /useController/);
-  assert.match(controlledFormItem, /children\(\{ field, fieldState \}\)/);
-  assert.doesNotMatch(controlledFormItem, /useFormState|<Controller/);
+  assert.match(searchForm, /import \{[\s\S]*Controller[\s\S]*\} from "react-hook-form"/);
+  assert.match(searchForm, /<Controller/);
+  assert.match(searchForm, /name=\{fieldConfig\.name\}/);
+  assert.match(searchForm, /rules=\{fieldConfig\.rules\}/);
+  assert.match(searchForm, /fieldConfig\.render\(\{/);
   assert.match(
-    controlledFormItem,
-    /formItemClassName = "controlled-form-item"/,
+    searchForm,
+    /<Controller[\s\S]*<Form\.Item[\s\S]*validateStatus=\{[\s\S]*fieldState\.invalid/,
+  );
+  assert.doesNotMatch(searchForm, /useController|ControlledFormItem/);
+
+  await assert.rejects(
+    access(new URL("../components/form/ControlledFormItem.jsx", import.meta.url)),
   );
 });
 
@@ -128,14 +126,13 @@ test("keeps multiple form items in one category item with slash separators", asy
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(searchForm, /function SearchCategory/);
   assert.match(
     searchForm,
-    /className="category-item"[\s\S]*\{children\}/,
+    /className="category-item"[\s\S]*category\.fields\.map/,
   );
   assert.match(
     searchForm,
-    /<SearchCategory label="검색어"[\s\S]*name="keyword"[\s\S]*name="searchTarget"[\s\S]*<\/SearchCategory>/,
+    /categoryLabel: "검색어"[\s\S]*name: "keyword"[\s\S]*name: "searchTarget"/,
   );
   assert.match(
     css,

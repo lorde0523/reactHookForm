@@ -52,6 +52,8 @@ import SearchConditionSummary from "./SearchConditionSummary";
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
 
+// 입력 컴포넌트와 저장 확인 화면이 같은 options 배열을 공유한다.
+// 별도 설정 객체에 라벨을 복제하지 않으므로 선택지가 바뀌어도 한 곳만 수정하면 된다.
 const searchTargetOptions = [
   { label: "제목 + 내용", value: "TITLE_CONTENT" },
   { label: "제목", value: "TITLE" },
@@ -92,6 +94,8 @@ const attachmentOptions = [
   { label: "미포함", value: false },
 ];
 
+// RHF가 조회조건 값의 유일한 상태 저장소다.
+// 필드를 추가할 때는 컴포넌트가 제어 컴포넌트로 동작하도록 여기에도 초기값을 추가한다.
 const defaultValues = {
   keyword: "",
   searchTarget: "TITLE_CONTENT",
@@ -141,8 +145,14 @@ const statusColor = {
   반려: "red",
 };
 
+// 저장 확인 화면에 필요한 필드명/표시 라벨/options만 공유한다.
+// 실제 사용자가 입력한 값은 Context나 ref에 저장하지 않고 RHF에서만 읽는다.
 const PreviewRegistryContext = createContext(null);
 
+/**
+ * 저장 확인 목록에서 제외할 "입력되지 않은 값"의 공통 기준이다.
+ * false와 0은 사용자가 선택할 수 있는 유효한 값이므로 빈 값으로 처리하지 않는다.
+ */
 function isEmptyValue(value) {
   return (
     value === undefined ||
@@ -152,6 +162,8 @@ function isEmptyValue(value) {
   );
 }
 
+// Select/Checkbox/Radio가 보관하는 실제 값(value)을 화면 표시값(label)으로 바꾼다.
+// String 비교를 사용해 true/false 같은 값도 options와 안정적으로 매칭한다.
 function findOptionLabel(options, value) {
   return (
     options?.find((option) => String(option.value) === String(value))?.label ??
@@ -159,6 +171,11 @@ function findOptionLabel(options, value) {
   );
 }
 
+/**
+ * RHF 원본 값을 저장 확인 화면용 문자열로 변환한다.
+ * 변환 우선순위는 필드별 formatValue → options 라벨 → 원본 문자열이다.
+ * 배열 값은 Checkbox.Group, 다중 Select처럼 여러 항목을 선택한 경우를 처리한다.
+ */
 function formatFieldValue(value, options, customFormatter) {
   if (isEmptyValue(value)) {
     return "전체";
@@ -191,6 +208,12 @@ function formatMinimumViews(value) {
     : `${Number(value).toLocaleString()}회 이상`;
 }
 
+/**
+ * 조회조건 카테고리의 DOM 구조를 한 곳에서 고정한다.
+ *
+ * 모든 children을 하나의 Col.category-item 안에 넣기 때문에 카테고리에
+ * Form.Item이 여러 개여도 같은 행에 배치되고 CSS의 "/" 구분자를 공유한다.
+ */
 function SearchCategory({ label, children }) {
   return (
     <Col span={24} className="flex-group">
@@ -204,6 +227,29 @@ function SearchCategory({ label, children }) {
   );
 }
 
+/**
+ * 조회 입력 필드의 RHF 연결과 저장 미리보기 메타데이터 등록을 함께 처리한다.
+ *
+ * 사용 예:
+ * <SearchField
+ *   name="status"
+ *   label="처리상태"
+ *   control={control}
+ *   options={statusOptions}
+ * >
+ *   {({ field, options }) => (
+ *     <Checkbox.Group
+ *       value={field.value}
+ *       options={options}
+ *       onChange={field.onChange}
+ *     />
+ *   )}
+ * </SearchField>
+ *
+ * options를 입력 컴포넌트와 미리보기가 함께 사용하므로 value → label 변환을 위한
+ * 별도 설정 객체가 필요 없다. 날짜/숫자처럼 options가 없는 필드만 formatValue를
+ * 전달해 표시 형식을 정의한다.
+ */
 function SearchField({
   name,
   label,
@@ -216,6 +262,8 @@ function SearchField({
   const registry = useContext(PreviewRegistryContext);
 
   useEffect(() => {
+    // 필드가 화면에 존재하는 동안만 메타데이터를 등록한다.
+    // cleanup에서 삭제하므로 조건부 렌더링 필드가 사라져도 미리보기에 남지 않는다.
     return registry.register({
       name,
       label,
@@ -274,6 +322,11 @@ const resultColumns = [
   },
 ];
 
+/**
+ * RHF 값에 포함된 dayjs 객체를 API/DB로 전달 가능한 문자열로 바꾼다.
+ * 화면 입력 중에는 DatePicker 호환을 위해 dayjs를 유지하고, 조회 또는 저장 직전에만
+ * 직렬화하여 UI 컴포넌트용 값과 서버 전송용 값의 책임을 분리한다.
+ */
 function toSerializableValues(values) {
   return Object.fromEntries(
     Object.entries(values).map(([key, value]) => {
@@ -286,9 +339,28 @@ function toSerializableValues(values) {
   );
 }
 
+/**
+ * RHF 기반 조회조건 입력, 조회 실행, 조회조건 저장 확인을 제공하는 화면 컴포넌트다.
+ *
+ * 사용 예:
+ * <SearchForm
+ *   onSearch={async (values) => searchApi(values)}
+ *   onSaveCondition={async (payload) => saveConditionApi(payload)}
+ * />
+ *
+ * onSearch에는 dayjs가 YYYY-MM-DD로 변환된 조회 값이 전달된다.
+ * onSaveCondition에는 저장 이름, DB 저장용 values, 확인 화면용 displayValues,
+ * 저장 시각이 전달된다. 두 콜백을 생략하면 현재 예제용 조회/저장 동작으로 실행된다.
+ */
 export default function SearchForm({ onSearch, onSaveCondition }) {
   const [messageApi, contextHolder] = message.useMessage();
+
+  // 이 ref에는 form 값이 아니라 SearchField가 등록한 label/options 메타데이터만 있다.
+  // 값은 항상 RHF의 handleSubmit/getValues/useWatch로 읽으므로 폼 값용 ref와 다르다.
   const registryRef = useRef(new Map());
+
+  // 아래 state는 모달 열림, 로딩, 결과처럼 일시적인 화면 UI 상태다.
+  // 조회조건 필드 값은 포함하지 않으며 RHF가 계속 단독으로 관리한다.
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [conditionName, setConditionName] = useState("");
   const [previewRows, setPreviewRows] = useState([]);
@@ -307,6 +379,8 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
     defaultValues,
   });
 
+  // 화면 상단의 적용 조건 개수처럼 입력 즉시 갱신되어야 하는 UI만 구독한다.
+  // 실제 조회/저장 시점의 전체 값은 불필요한 렌더링 없이 handleSubmit/getValues로 읽는다.
   const watchedValues = useWatch({ control });
 
   const registry = useMemo(
@@ -314,14 +388,18 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
       register(fieldMeta) {
         registryRef.current.set(fieldMeta.name, fieldMeta);
 
+        // useEffect cleanup 함수로 사용되어 언마운트된 필드의 메타데이터를 제거한다.
         return () => {
           registryRef.current.delete(fieldMeta.name);
         };
       },
     }),
+    // Context 객체를 한 번만 만들어 SearchField의 등록 effect가 매 렌더마다 재실행되지 않게 한다.
     [],
   );
 
+  // RHF 값과 JSX에서 등록한 메타데이터를 결합해 모달 출력 행을 만든다.
+  // 빈 값은 이 단계에서 제외하므로 SearchConditionSummary는 표시 작업에만 집중한다.
   const createPreviewRows = useCallback((values) => {
     return Array.from(registryRef.current.values())
       .filter((fieldMeta) => !isEmptyValue(values[fieldMeta.name]))
@@ -347,6 +425,8 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
     }).length;
   }, [watchedValues]);
 
+  // 조회 버튼은 handleSubmit을 거치므로 rules 검증을 통과한 데이터만 전달된다.
+  // 부모가 onSearch를 제공하면 실제 API 호출을 위임하고, 없으면 예제 결과를 사용한다.
   const submitSearch = handleSubmit(async (data) => {
     const payload = toSerializableValues(data);
 
@@ -369,6 +449,8 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
   };
 
   const openSaveModal = () => {
+    // 버튼을 누른 순간의 RHF 스냅샷으로 미리보기를 고정한다.
+    // 모달 렌더링을 위해 폼 전체를 watch하지 않아도 되므로 불필요한 재렌더링을 줄인다.
     setPreviewRows(createPreviewRows(getValues()));
     setConditionName("");
     setSaveModalOpen(true);
@@ -397,6 +479,8 @@ export default function SearchForm({ onSearch, onSaveCondition }) {
     try {
       setIsSaving(true);
 
+      // 실제 화면에서는 onSaveCondition 안에서 DB 저장 API를 호출하면 된다.
+      // 콜백이 없는 현재 예제에서는 짧은 지연으로 저장 동작만 시뮬레이션한다.
       if (onSaveCondition) {
         await onSaveCondition(payload);
       } else {

@@ -1,13 +1,7 @@
 "use client";
 
 import { Form } from "antd";
-import { Controller, useFormState } from "react-hook-form";
-
-function getFieldError(errors, name) {
-  return name
-    .split(".")
-    .reduce((current, path) => current?.[path], errors);
-}
+import { useController } from "react-hook-form";
 
 export default function ControlledFormItem({
   name,
@@ -17,24 +11,22 @@ export default function ControlledFormItem({
   formItemProps = {},
   formItemClassName = "controlled-form-item",
 }) {
-  const { errors } = useFormState({ control, name });
-  const fieldError = getFieldError(errors, name);
+  const { field, fieldState } = useController({
+    name,
+    control,
+    rules,
+  });
 
   return (
     <Form.Item
       {...formItemProps}
       className={formItemClassName}
       validateStatus={
-        fieldError ? "error" : formItemProps.validateStatus
+        fieldState.invalid ? "error" : formItemProps.validateStatus
       }
-      help={fieldError?.message ?? formItemProps.help}
+      help={fieldState.error?.message ?? formItemProps.help}
     >
-      <Controller
-        name={name}
-        control={control}
-        rules={rules}
-        render={children}
-      />
+      {children({ field, fieldState })}
     </Form.Item>
   );
 }

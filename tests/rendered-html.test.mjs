@@ -110,8 +110,9 @@ test("reuses one controlled form item for RHF field wiring", async () => {
   assert.match(searchForm, /<ControlledFormItem/);
   assert.match(searchForm, /formItemClassName="search-form-item"/);
   assert.doesNotMatch(searchForm, /<Controller/);
-  assert.match(controlledFormItem, /<Form\.Item[\s\S]*<Controller/);
-  assert.match(controlledFormItem, /useFormState/);
+  assert.match(controlledFormItem, /useController/);
+  assert.match(controlledFormItem, /children\(\{ field, fieldState \}\)/);
+  assert.doesNotMatch(controlledFormItem, /useFormState|<Controller/);
   assert.match(
     controlledFormItem,
     /formItemClassName = "controlled-form-item"/,

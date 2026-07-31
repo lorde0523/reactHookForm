@@ -1,134 +1,121 @@
-# RHF + Ant Design SearchForm
+# Easy RHF + Ant Design Search Conditions
 
-React Hook Form을 값의 유일한 저장소로 사용하고 Ant Design의 기본 `Form`,
-`Form.Item`, `Row`, `Col` 구조를 유지하는 조회조건 예제입니다.
+기존 Ant Design 입력 컴포넌트는 그대로 사용하면서 조회조건의 데이터 제어만
+React Hook Form으로 통합한 공통 조회조건 폼입니다.
 
-## 핵심 설계
+화면 개발자가 알아야 하는 컴포넌트는 세 개뿐입니다.
 
-- `searchConditionSchema.jsx`: 렌더링, 기본값, options, 표시 및 서버 복원 규칙
-- `searchConditionModel.js`: 서버 값 복원, 조회 직렬화, 모달 snapshot 생성
-- `SearchForm.jsx`: RHF 제어, 서버 초기값 로딩, 조회, 초기화, 저장 흐름
-- `SearchConditionSaveModal.jsx`: 조회조건 이름과 표시용 snapshot 출력
+- `ConditionForm`: 초기값, 서버 로딩, 조회, 초기화, 저장 모달 담당
+- `ConditionGroup`: 화면 왼쪽 카테고리 라벨
+- `ConditionField`: RHF 필드명, Form.Item 라벨, 기본값 선언
 
-렌더링 시 별도의 메타데이터 등록 effect나 DOM 탐색을 사용하지 않습니다.
-동일한 스키마가 FormItem 렌더링과 값 변환에 재사용됩니다.
+`Controller`, `FormProvider`, `useFormContext`, `setValue 반복 호출`, 날짜 변환,
+모달용 데이터 생성은 공통 엔진 내부에만 있습니다.
+
+## 가장 간단한 사용법
 
 ```jsx
-{
-  name: "department",
-  label: "담당부서",
-  options: departmentOptions,
-  render: ({ field, options }) => (
-    <Select
-      value={field.value}
-      onChange={field.onChange}
-      options={options}
-    />
-  ),
+import { Checkbox, DatePicker, Input, Select } from "antd";
+import dayjs from "dayjs";
+import {
+  ConditionField,
+  ConditionForm,
+  ConditionGroup,
+} from "./components/search-form";
+
+const { RangePicker } = DatePicker;
+
+export default function NoticeSearch() {
+  return (
+    <ConditionForm
+      loadValues={loadSavedCondition}
+      onSearch={searchNotices}
+      onSave={saveCondition}
+    >
+      <ConditionGroup label="검색어">
+        <ConditionField name="keyword" defaultValue="">
+          <Input placeholder="검색어" />
+        </ConditionField>
+
+        <ConditionField name="target" defaultValue="TITLE">
+          <Select options={targetOptions} />
+        </ConditionField>
+      </ConditionGroup>
+
+      <ConditionGroup label="등록기간">
+        <ConditionField
+          name="registeredRange"
+          label="등록기간"
+          valueType="dateRange"
+          defaultValue={() => [dayjs().subtract(29, "day"), dayjs()]}
+        >
+          <RangePicker />
+        </ConditionField>
+
+        <ConditionField
+          name="hasAttachment"
+          label="첨부파일"
+          defaultValue={false}
+          valuePropName="checked"
+          checkedText="첨부파일이 있는 게시물만 조회"
+        >
+          <Checkbox>첨부파일이 있는 게시물만 조회</Checkbox>
+        </ConditionField>
+      </ConditionGroup>
+    </ConditionForm>
+  );
 }
 ```
 
-## 렌더링 구조
+Ant `Input`, `Select`, `Checkbox.Group`, `Radio.Group`, `InputNumber`,
+`DatePicker`, `RangePicker`의 서로 다른 `onChange` 형식은 자동으로 RHF 값으로
+변환됩니다.
+
+## API 연결
 
 ```jsx
-<FormProvider {...methods}>
-  <Form component="form" onFinish={submitSearch}>
-    <Row>
-      {searchConditionSchema.map((category) => (
-        <Col key={category.key} className="flex-group">
-          <div className="category-name">
-            {category.categoryLabel}
-          </div>
+async function loadSavedCondition({ signal }) {
+  const response = await fetch("/api/search-conditions/default", { signal });
+  return response.json();
+}
 
-          <Row className="category-list">
-            {category.items.map((item) => (
-              <Col key={item.key} className="category-item">
-                {item.fields.map((fieldConfig) => (
-                  <Controller
-                    key={fieldConfig.name}
-                    name={fieldConfig.name}
-                    control={control}
-                    render={({ field, fieldState }) => (
-                      <Form.Item
-                        label={fieldConfig.label}
-                        validateStatus={
-                          fieldState.invalid ? "error" : undefined
-                        }
-                      >
-                        {fieldConfig.render({
-                          field,
-                          fieldState,
-                          options: fieldConfig.options,
-                        })}
-                      </Form.Item>
-                    )}
-                  />
-                ))}
-              </Col>
-            ))}
-          </Row>
-        </Col>
-      ))}
-    </Row>
-  </Form>
-</FormProvider>
+async function searchNotices(values) {
+  // RangePicker는 ["2026-07-01", "2026-07-31"]로 변환됩니다.
+  // 체크 해제된 단일 Checkbox도 false로 포함됩니다.
+  const response = await fetch("/api/notices/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(values),
+  });
+
+  return response.json();
+}
+
+async function saveCondition(payload) {
+  await fetch("/api/search-conditions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
 ```
 
-## 서버 조회조건 로딩
-
-`loadInitialCondition`은 저장된 서버 조회조건을 반환합니다. 폼은 여러 번의
-`setValue` 대신 한 번의 `reset`으로 값을 반영합니다.
-
-```jsx
-<SearchForm
-  loadInitialCondition={async ({ signal }) => {
-    const response = await fetch("/api/search-condition/default", {
-      signal,
-    });
-
-    return response.json();
-  }}
-/>
-```
-
-서버 응답의 날짜 문자열은 스키마의 `hydrate`를 통해 `dayjs`로 복원됩니다.
-
-## 조회와 저장
-
-```jsx
-<SearchForm
-  onSearch={async (values) => {
-    const response = await searchNoticeList(values);
-    return response.items;
-  }}
-  onSaveCondition={async (payload) => {
-    await saveSearchCondition(payload);
-  }}
-/>
-```
-
-저장 payload:
+`onSave`에는 원본 저장 값과 모달 표시 값이 같은 시점의 snapshot으로 전달됩니다.
 
 ```js
 {
-  name: "이번 달 처리 대기 건",
+  name: "이번 달 장애 조회",
   values: {
     keyword: "장애",
-    searchTarget: "TITLE_CONTENT",
-    status: ["READY"],
-    hasAttachment: false,
-    registeredRange: ["2026-07-01", "2026-07-31"]
+    target: "TITLE",
+    registeredRange: ["2026-07-01", "2026-07-31"],
+    hasAttachment: false
   },
   displayValues: [
     {
-      names: ["keyword", "searchTarget"],
+      names: ["keyword", "target"],
       label: "검색어",
-      displayValue: "장애 / 제목 + 내용"
-    },
-    {
-      names: ["status"],
-      label: "처리상태",
-      displayValue: "대기"
+      displayValue: "장애 / 제목"
     },
     {
       names: ["registeredRange"],
@@ -140,19 +127,106 @@ React Hook Form을 값의 유일한 저장소로 사용하고 Ant Design의 기�
 }
 ```
 
-단일 Checkbox의 `false`는 `values`에 저장되지만 모달의 `displayValues`에서는
-제외됩니다. `true`이면 Checkbox 문구가 표시됩니다.
+`hasAttachment: false`는 `values`에는 저장되고 모달의 `displayValues`에서만
+제외됩니다.
 
-상세 전환 방법은
-[조회조건 저장 로직 마이그레이션 가이드](docs/search-condition-provider-migration.md)를
+## 서버 조회 후 원하는 시점에 값 변경
+
+서버 기본 조회는 `loadValues`만 전달하면 `reset()` 한 번으로 적용됩니다.
+저장조건 선택처럼 외부 이벤트로 변경해야 할 때는 ref API를 사용합니다.
+
+`loadValues`를 인라인 함수로 작성해도 부모 리렌더링만으로 재조회하지 않습니다.
+사용자나 저장조건 ID가 바뀌어 다시 불러와야 할 때는 해당 값을 `loadKey`로 전달합니다.
+
+```jsx
+<ConditionForm
+  loadKey={selectedConditionId}
+  loadValues={() => loadCondition(selectedConditionId)}
+  onSearch={searchNotices}
+>
+  {/* fields */}
+</ConditionForm>
+```
+
+```jsx
+const conditionFormRef = useRef(null);
+
+<ConditionForm ref={conditionFormRef} onSearch={searchNotices}>
+  {/* fields */}
+</ConditionForm>
+
+conditionFormRef.current.setValue("keyword", "긴급");
+conditionFormRef.current.reset(serverCondition);
+conditionFormRef.current.resetToDefaults();
+conditionFormRef.current.openSaveModal();
+```
+
+외부 코드에서 `useFormContext`를 호출하지 않으므로 Provider 밖에서 호출하여 생기는
+`control is null` 오류가 없습니다.
+
+## 스타일 Form.Item 사용
+
+모든 필드에 공통 스타일 FormItem을 적용할 수 있습니다.
+
+```jsx
+<ConditionForm
+  components={{ FormItem: StyledFormItem }}
+  onSearch={searchNotices}
+>
+  {/* fields */}
+</ConditionForm>
+```
+
+특정 필드만 다른 FormItem을 사용할 수도 있습니다.
+
+```jsx
+<ConditionField
+  name="keyword"
+  defaultValue=""
+  as={CompactFormItem}
+  formItemProps={{ required: true }}
+>
+  <Input />
+</ConditionField>
+```
+
+`StyledFormItem`과 `CompactFormItem`은 내부에서 Ant Design `Form.Item`을 반환하는
+기존 스타일 컴포넌트를 그대로 사용할 수 있습니다.
+
+## 표시 규칙
+
+라벨이 있는 필드는 모달에서 독립된 행이 됩니다.
+
+```jsx
+<ConditionField name="department" label="담당부서">
+  <Select options={departmentOptions} />
+</ConditionField>
+```
+
+라벨이 없는 필드는 같은 Group 안에서 `/`로 합쳐집니다.
+
+```text
+검색어 | 장애 / 제목 + 내용
+```
+
+조건에 따라 모달 표시 여부를 제어하려면 `showWhen`만 추가합니다.
+
+```jsx
+<ConditionField
+  name="target"
+  showWhen={(_value, allValues) => Boolean(allValues.keyword)}
+>
+  <Select options={targetOptions} />
+</ConditionField>
+```
+
+같은 카테고리 안에서 슬래시 묶음을 분리해야 할 때만 `ConditionItem`을 사용합니다.
+
+상세한 마이그레이션 과정은
+[공통 ConditionForm 마이그레이션 가이드](docs/search-condition-provider-migration.md)를
 참고하세요.
 
-## 실행과 검증
-
-```bash
-npm install
-npm run dev
-```
+## 검증
 
 ```bash
 npm run lint

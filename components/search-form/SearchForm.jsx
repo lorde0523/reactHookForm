@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CalendarOutlined,
   CheckCircleFilled,
   DatabaseOutlined,
   ReloadOutlined,
@@ -10,21 +9,13 @@ import {
   SlidersOutlined,
 } from "@ant-design/icons";
 import {
-  Alert,
   Button,
-  Checkbox,
   Col,
-  DatePicker,
   Divider,
   Empty,
   Flex,
   Form,
-  Input,
-  InputNumber,
-  Modal,
-  Radio,
   Row,
-  Select,
   Space,
   Table,
   Tag,
@@ -33,6 +24,8 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import {
+  useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -40,72 +33,21 @@ import {
   Controller,
   FormProvider,
   useForm,
-  useFormContext,
   useWatch,
 } from "react-hook-form";
+import SearchConditionSaveModal from "./SearchConditionSaveModal";
 import {
-  ConditionCategory,
-  ConditionCategoryItem,
-  ConditionCollectorProvider,
-  useConditionCollector,
-} from "./ConditionCollector";
-import ConditionFormItem from "./ConditionFormItem";
-import { isEmptyValue } from "./createConditionDisplayRows";
-import SearchConditionSummary from "./SearchConditionSummary";
+  countActiveSearchFields,
+  createSearchSnapshot,
+  hydrateSearchValues,
+  serializeSearchValues,
+} from "./searchConditionModel";
+import {
+  createDefaultSearchValues,
+  searchConditionSchema,
+} from "./searchConditionSchema";
 
-const { RangePicker } = DatePicker;
 const { Text } = Typography;
-
-// 입력 컴포넌트와 저장 확인 화면이 같은 options 배열을 공유한다.
-// 별도 설정 객체에 라벨을 복제하지 않으므로 선택지가 바뀌어도 한 곳만 수정하면 된다.
-const searchTargetOptions = [
-  { label: "제목 + 내용", value: "TITLE_CONTENT" },
-  { label: "제목", value: "TITLE" },
-  { label: "내용", value: "CONTENT" },
-  { label: "작성자", value: "WRITER" },
-];
-
-const statusOptions = [
-  { label: "대기", value: "READY" },
-  { label: "처리중", value: "IN_PROGRESS" },
-  { label: "완료", value: "COMPLETE" },
-  { label: "반려", value: "REJECTED" },
-];
-
-const visibilityOptions = [
-  { label: "전체", value: "ALL" },
-  { label: "공개", value: "PUBLIC" },
-  { label: "비공개", value: "PRIVATE" },
-];
-
-const departmentOptions = [
-  { label: "서비스기획팀", value: "SERVICE_PLAN" },
-  { label: "플랫폼개발팀", value: "PLATFORM_DEV" },
-  { label: "고객지원팀", value: "CUSTOMER_SUPPORT" },
-  { label: "경영지원팀", value: "MANAGEMENT_SUPPORT" },
-];
-
-const tagOptions = [
-  { label: "공지", value: "NOTICE" },
-  { label: "장애", value: "INCIDENT" },
-  { label: "배포", value: "RELEASE" },
-  { label: "정책", value: "POLICY" },
-  { label: "문의", value: "QUESTION" },
-];
-
-// RHF가 조회조건 값의 유일한 상태 저장소다.
-// 필드를 추가할 때는 컴포넌트가 제어 컴포넌트로 동작하도록 여기에도 초기값을 추가한다.
-const defaultValues = {
-  keyword: "",
-  searchTarget: "TITLE_CONTENT",
-  status: ["READY", "IN_PROGRESS"],
-  visibility: "ALL",
-  department: undefined,
-  tags: [],
-  registeredRange: [dayjs().subtract(29, "day"), dayjs()],
-  minimumViews: null,
-  hasAttachment: false,
-};
 
 const initialResults = [
   {
@@ -144,218 +86,6 @@ const statusColor = {
   반려: "red",
 };
 
-function formatDateRange(value) {
-  return value?.length === 2
-    ? `${value[0].format("YYYY-MM-DD")} ~ ${value[1].format("YYYY-MM-DD")}`
-    : "전체";
-}
-
-function formatMinimumViews(value) {
-  return isEmptyValue(value)
-    ? "전체"
-    : `${Number(value).toLocaleString()}회 이상`;
-}
-
-/**
- * 조회조건 화면의 유일한 구성 정의다.
- *
- * categoryLabel은 화면 왼쪽 카테고리 제목과 무라벨 Form.Item의 저장 확인 라벨에
- * 사용한다. field.label은 실제 Form.Item label이면서 저장 확인 화면의 조건명이다.
- * label을 생략한 필드는 같은 category-item의 다른 무라벨 필드 값과 "/"로 합쳐진다.
- *
- * render에는 Controller가 제공한 field와 fieldState, 현재 설정의 options가 전달된다.
- * Input은 {...field}로 연결할 수 있지만 Select/DatePicker/Checkbox 등은 컴포넌트 규격에
- * 맞춰 value 또는 checked와 field.onChange를 명시적으로 연결한다.
- */
-const searchCategories = [
-  {
-    key: "keyword-category",
-    categoryLabel: "검색어",
-    fields: [
-      {
-        name: "keyword",
-        rules: {
-          maxLength: {
-            value: 100,
-            message: "검색어는 100자 이하로 입력해 주세요.",
-          },
-        },
-        render: ({ field }) => (
-          <Input
-            {...field}
-            allowClear
-            size="large"
-            prefix={<SearchOutlined className="field-prefix" />}
-            placeholder="제목, 내용 또는 작성자 검색"
-            maxLength={100}
-          />
-        ),
-      },
-      {
-        name: "searchTarget",
-        options: searchTargetOptions,
-        render: ({ field, options }) => (
-          <Select
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            options={options}
-            size="large"
-            className="field-full"
-          />
-        ),
-      },
-    ],
-  },
-  {
-    key: "status-category",
-    categoryLabel: "처리상태",
-    fields: [
-      {
-        name: "status",
-        options: statusOptions,
-        render: ({ field, options }) => (
-          <Checkbox.Group
-            value={field.value}
-            onChange={field.onChange}
-            options={options}
-            className="choice-group"
-          />
-        ),
-      },
-      {
-        name: "visibility",
-        options: visibilityOptions,
-        render: ({ field, options }) => (
-          <Radio.Group
-            value={field.value}
-            onChange={(event) => field.onChange(event.target.value)}
-            options={options}
-            optionType="button"
-            buttonStyle="solid"
-            className="radio-segment"
-          />
-        ),
-      },
-    ],
-  },
-  {
-    key: "classification-category",
-    categoryLabel: "분류",
-    fields: [
-      {
-        name: "department",
-        label: "담당부서",
-        options: departmentOptions,
-        render: ({ field, options }) => (
-          <Select
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            allowClear
-            showSearch
-            optionFilterProp="label"
-            placeholder="담당부서 전체"
-            options={options}
-            size="large"
-            className="field-full"
-          />
-        ),
-      },
-      {
-        name: "tags",
-        label: "업무 태그",
-        options: tagOptions,
-        render: ({ field, options }) => (
-          <Select
-            mode="multiple"
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            allowClear
-            placeholder="태그를 선택해 주세요"
-            options={options}
-            maxTagCount="responsive"
-            size="large"
-            className="field-full"
-          />
-        ),
-      },
-    ],
-  },
-  {
-    key: "registration-category",
-    categoryLabel: "등록기간",
-    fields: [
-      {
-        name: "registeredRange",
-        label: "등록기간",
-        formatValue: formatDateRange,
-        render: ({ field }) => (
-          <RangePicker
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            format="YYYY-MM-DD"
-            separator="→"
-            allowClear
-            size="large"
-            className="field-full"
-            prefix={<CalendarOutlined />}
-            presets={[
-              {
-                label: "최근 7일",
-                value: [dayjs().subtract(6, "day"), dayjs()],
-              },
-              {
-                label: "최근 30일",
-                value: [dayjs().subtract(29, "day"), dayjs()],
-              },
-              {
-                label: "이번 달",
-                value: [dayjs().startOf("month"), dayjs().endOf("month")],
-              },
-            ]}
-          />
-        ),
-      },
-      {
-        name: "minimumViews",
-        label: "최소 조회수",
-        formatValue: formatMinimumViews,
-        render: ({ field }) => (
-          <InputNumber
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            min={0}
-            max={9999999}
-            step={100}
-            placeholder="제한 없음"
-            addonAfter="회 이상"
-            size="large"
-            className="field-full"
-          />
-        ),
-      },
-      {
-        name: "hasAttachment",
-        label: "첨부파일",
-        controlType: "single-checkbox",
-        render: ({ field }) => (
-          <Checkbox
-            checked={Boolean(field.value)}
-            onChange={(event) => field.onChange(event.target.checked)}
-            onBlur={field.onBlur}
-          >
-            첨부파일이 있는 게시물만 조회
-          </Checkbox>
-        ),
-      },
-    ],
-  },
-];
-
 const resultColumns = [
   {
     title: "관리번호",
@@ -392,178 +122,187 @@ const resultColumns = [
   },
 ];
 
-/**
- * RHF 값에 포함된 dayjs 객체를 API/DB로 전달 가능한 문자열로 바꾼다.
- * 화면 입력 중에는 DatePicker 호환을 위해 dayjs를 유지하고, 조회 또는 저장 직전에만
- * 직렬화하여 UI 컴포넌트용 값과 서버 전송용 값의 책임을 분리한다.
- */
-function toSerializableValues(values) {
-  return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => {
-      if (dayjs.isDayjs(value)) {
-        return [key, value.format("YYYY-MM-DD")];
-      }
-
-      if (Array.isArray(value) && value.every((item) => dayjs.isDayjs(item))) {
-        return [key, value.map((item) => item.format("YYYY-MM-DD"))];
-      }
-
-      return [key, value];
-    }),
+function ActiveConditionCount({ control }) {
+  const values = useWatch({ control });
+  const count = useMemo(
+    () => countActiveSearchFields(searchConditionSchema, values),
+    [values],
   );
-}
-
-/**
- * RHF 기반 조회조건 입력, 조회 실행, 조회조건 저장 확인을 제공하는 화면 컴포넌트다.
- *
- * 사용 예:
- * <SearchForm
- *   onSearch={async (values) => searchApi(values)}
- *   onSaveCondition={async (payload) => saveConditionApi(payload)}
- * />
- *
- * onSearch에는 dayjs가 YYYY-MM-DD로 변환된 조회 값이 전달된다.
- * onSaveCondition에는 저장 이름, DB 저장용 values, 확인 화면용 displayValues,
- * 저장 시각이 전달된다. 두 콜백을 생략하면 현재 예제용 조회/저장 동작으로 실행된다.
- */
-export default function SearchForm({ onSearch, onSaveCondition }) {
-  const methods = useForm({
-    defaultValues,
-  });
 
   return (
-    <FormProvider {...methods}>
-      <ConditionCollectorProvider>
-        <SearchFormContent
-          onSearch={onSearch}
-          onSaveCondition={onSaveCondition}
-        />
-      </ConditionCollectorProvider>
-    </FormProvider>
+    <Tag bordered={false} color="blue">
+      {count}개 조건 적용
+    </Tag>
   );
 }
 
-function SearchFormContent({ onSearch, onSaveCondition }) {
+/**
+ * RHF가 조회조건 값의 유일한 상태 저장소다.
+ *
+ * loadInitialCondition은 서버에 저장된 조회조건을 반환하는 async 함수다.
+ * 여러 setValue 호출 대신 reset 한 번으로 전체 값을 반영해 렌더링을 최소화한다.
+ */
+export default function SearchForm({
+  loadInitialCondition,
+  onSearch,
+  onSaveCondition,
+}) {
   const [messageApi, contextHolder] = message.useMessage();
-  const { collect } = useConditionCollector();
-
-  // 아래 state는 모달 열림, 로딩, 결과처럼 일시적인 화면 UI 상태다.
-  // 조회조건 필드 값은 포함하지 않으며 RHF가 계속 단독으로 관리한다.
+  const defaultValues = useMemo(() => createDefaultSearchValues(), []);
+  const methods = useForm({ defaultValues });
+  const {
+    control,
+    getValues,
+    handleSubmit,
+    reset,
+    formState: { isSubmitting },
+  } = methods;
+  const [isLoadingInitialCondition, setIsLoadingInitialCondition] =
+    useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
-  const [conditionName, setConditionName] = useState("");
-  const [conditionSnapshot, setConditionSnapshot] = useState({
-    rawValues: null,
-    displayValues: [],
-  });
+  const [conditionSnapshot, setConditionSnapshot] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSearch, setLastSearch] = useState(null);
   const [savedConditions, setSavedConditions] = useState([]);
   const [results, setResults] = useState(initialResults);
 
-  const {
-    control,
-    handleSubmit,
-    getValues,
-    reset,
-    formState: { isSubmitting },
-  } = useFormContext();
-
-  // 화면 상단의 적용 조건 개수처럼 입력 즉시 갱신되어야 하는 UI만 구독한다.
-  // 실제 조회/저장 시점의 전체 값은 불필요한 렌더링 없이 handleSubmit/getValues로 읽는다.
-  const watchedValues = useWatch({ control });
-
-  const activeConditionCount = useMemo(() => {
-    return Object.entries(watchedValues).filter(([key, value]) => {
-      if (key === "visibility" && value === "ALL") return false;
-      if (key === "searchTarget" && value === "TITLE_CONTENT") return false;
-      if (key === "hasAttachment" && value === false) return false;
-      return !isEmptyValue(value);
-    }).length;
-  }, [watchedValues]);
-
-  // 조회 버튼은 handleSubmit을 거치므로 rules 검증을 통과한 데이터만 전달된다.
-  // 부모가 onSearch를 제공하면 실제 API 호출을 위임하고, 없으면 예제 결과를 사용한다.
-  const submitSearch = handleSubmit(async (data) => {
-    const payload = toSerializableValues(data);
-
-    if (onSearch) {
-      await onSearch(payload);
+  useEffect(() => {
+    if (!loadInitialCondition) {
+      return undefined;
     }
 
-    setLastSearch({
-      values: payload,
-      searchedAt: dayjs().format("YYYY-MM-DD HH:mm:ss"),
-    });
-    setResults(initialResults);
-    messageApi.success("조회가 완료되었습니다.");
+    const abortController = new AbortController();
+    let active = true;
+
+    const load = async () => {
+      try {
+        setIsLoadingInitialCondition(true);
+        const serverValues = await loadInitialCondition({
+          signal: abortController.signal,
+        });
+
+        if (active && serverValues) {
+          reset(
+            hydrateSearchValues(
+              searchConditionSchema,
+              serverValues,
+              defaultValues,
+            ),
+          );
+        }
+      } catch (error) {
+        if (active && error?.name !== "AbortError") {
+          messageApi.error("저장된 조회조건을 불러오지 못했습니다.");
+        }
+      } finally {
+        if (active) {
+          setIsLoadingInitialCondition(false);
+        }
+      }
+    };
+
+    load();
+
+    return () => {
+      active = false;
+      abortController.abort();
+    };
+  }, [defaultValues, loadInitialCondition, messageApi, reset]);
+
+  const submitSearch = handleSubmit(async (values) => {
+    const payload = serializeSearchValues(searchConditionSchema, values);
+
+    try {
+      if (onSearch) {
+        const nextResults = await onSearch(payload);
+
+        if (Array.isArray(nextResults)) {
+          setResults(nextResults);
+        }
+      } else {
+        setResults(initialResults);
+      }
+
+      setLastSearch({
+        values: payload,
+        searchedAt: dayjs().format("YYYY-MM-DD HH:mm:ss"),
+      });
+      messageApi.success("조회가 완료되었습니다.");
+    } catch {
+      messageApi.error("조회에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    }
   });
 
-  const handleReset = () => {
+  const resetSearchConditions = useCallback(() => {
     reset(defaultValues);
     setLastSearch(null);
     messageApi.info("조회조건을 초기화했습니다.");
-  };
+  }, [defaultValues, messageApi, reset]);
 
-  const openSaveModal = () => {
-    // 버튼을 누른 순간의 RHF 스냅샷으로 미리보기를 고정한다.
-    // collect는 렌더링된 FormItem 메타데이터와 RHF 최신 값을 결합한다.
-    setConditionSnapshot({
-      rawValues: toSerializableValues(getValues()),
-      displayValues: collect(),
-    });
-    setConditionName("");
+  const openSaveModal = useCallback(() => {
+    setConditionSnapshot(
+      createSearchSnapshot(searchConditionSchema, getValues()),
+    );
     setSaveModalOpen(true);
-  };
+  }, [getValues]);
 
-  const saveCondition = async () => {
-    const trimmedName = conditionName.trim();
+  const closeSaveModal = useCallback(() => {
+    setSaveModalOpen(false);
+  }, []);
 
-    if (!trimmedName) {
-      messageApi.warning("저장할 조회조건 이름을 입력해 주세요.");
-      return;
-    }
-
-    const values =
-      conditionSnapshot.rawValues ?? toSerializableValues(getValues());
-    const payload = {
-      name: trimmedName,
-      values,
-      displayValues: conditionSnapshot.displayValues.map(
-        ({ names, label, displayValue }) => ({
-          names,
-          label,
-          displayValue,
-        }),
-      ),
-      savedAt: dayjs().toISOString(),
-    };
-
-    try {
-      setIsSaving(true);
-
-      // 실제 화면에서는 onSaveCondition 안에서 DB 저장 API를 호출하면 된다.
-      // 콜백이 없는 현재 예제에서는 짧은 지연으로 저장 동작만 시뮬레이션한다.
-      if (onSaveCondition) {
-        await onSaveCondition(payload);
-      } else {
-        await new Promise((resolve) => window.setTimeout(resolve, 450));
+  const saveCondition = useCallback(
+    async (conditionName) => {
+      if (!conditionName) {
+        messageApi.warning("저장할 조회조건 이름을 입력해 주세요.");
+        return;
       }
 
-      setSavedConditions((current) => [
-        { name: trimmedName, count: activeConditionCount },
-        ...current.filter((item) => item.name !== trimmedName),
-      ].slice(0, 4));
-      setSaveModalOpen(false);
-      messageApi.success(`‘${trimmedName}’ 조회조건을 저장했습니다.`);
-    } catch {
-      messageApi.error("조회조건 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+      if (!conditionSnapshot) {
+        return;
+      }
+
+      const payload = {
+        name: conditionName,
+        values: conditionSnapshot.values,
+        displayValues: conditionSnapshot.displayValues,
+        savedAt: dayjs().toISOString(),
+      };
+
+      try {
+        setIsSaving(true);
+
+        if (onSaveCondition) {
+          await onSaveCondition(payload);
+        } else {
+          await new Promise((resolve) => window.setTimeout(resolve, 450));
+        }
+
+        const conditionCount = conditionSnapshot.displayValues.reduce(
+          (count, item) => count + item.names.length,
+          0,
+        );
+
+        setSavedConditions((current) =>
+          [
+            { name: conditionName, count: conditionCount },
+            ...current.filter((item) => item.name !== conditionName),
+          ].slice(0, 4),
+        );
+        setSaveModalOpen(false);
+        messageApi.success(`‘${conditionName}’ 조회조건을 저장했습니다.`);
+      } catch {
+        messageApi.error(
+          "조회조건 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        );
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [conditionSnapshot, messageApi, onSaveCondition],
+  );
 
   return (
-    <>
+    <FormProvider {...methods}>
       {contextHolder}
 
       <section className="search-panel" aria-labelledby="search-panel-title">
@@ -574,13 +313,15 @@ function SearchFormContent({ onSearch, onSaveCondition }) {
                 <SlidersOutlined />
               </span>
               <h2 id="search-panel-title">상세 조회조건</h2>
-              <Tag bordered={false} color="blue">
-                {activeConditionCount}개 조건 적용
-              </Tag>
+              <ActiveConditionCount control={control} />
             </div>
             <p>필요한 항목만 입력하세요. 비어 있는 조건은 전체로 조회됩니다.</p>
           </div>
-          <Button icon={<SaveOutlined />} onClick={openSaveModal}>
+          <Button
+            icon={<SaveOutlined />}
+            onClick={openSaveModal}
+            loading={isLoadingInitialCondition}
+          >
             조회조건 저장
           </Button>
         </div>
@@ -594,64 +335,58 @@ function SearchFormContent({ onSearch, onSaveCondition }) {
           className="search-form"
         >
           <Row gutter={[24, 20]} className="search-form-row">
-            {searchCategories.map((category) => (
-              <ConditionCategory
-                key={category.key}
-                categoryKey={category.key}
-                label={category.categoryLabel}
-              >
-                <Col span={24} className="flex-group">
-                  <div className="category-name">
-                    {category.categoryLabel}
-                  </div>
+            {searchConditionSchema.map((category) => (
+              <Col key={category.key} span={24} className="flex-group">
+                <div className="category-name">{category.categoryLabel}</div>
 
-                  <Row className="category-list">
-                    <ConditionCategoryItem itemKey="default">
-                      <Col span={24} className="category-item">
-                        {category.fields.map((fieldConfig) => (
-                          <Controller
-                            key={fieldConfig.name}
-                            name={fieldConfig.name}
-                            control={control}
-                            rules={fieldConfig.rules}
-                            render={({ field, fieldState }) => (
-                              <ConditionFormItem
-                                fieldName={fieldConfig.name}
-                                label={fieldConfig.label}
-                                controlType={fieldConfig.controlType}
-                                options={fieldConfig.options}
-                                formatValue={fieldConfig.formatValue}
-                                className={[
-                                  "search-form-item",
-                                  fieldConfig.label &&
-                                    "search-form-item-labeled",
-                                ].filter(Boolean).join(" ")}
-                                validateStatus={
-                                  fieldState.invalid ? "error" : undefined
-                                }
-                                help={fieldState.error?.message}
-                              >
-                                {fieldConfig.render({
-                                  field,
-                                  fieldState,
-                                  options: fieldConfig.options,
-                                })}
-                              </ConditionFormItem>
-                            )}
-                          />
-                        ))}
-                      </Col>
-                    </ConditionCategoryItem>
-                  </Row>
-                </Col>
-              </ConditionCategory>
+                <Row className="category-list">
+                  {category.items.map((item) => (
+                    <Col
+                      key={item.key}
+                      span={24}
+                      className="category-item"
+                    >
+                      {item.fields.map((fieldConfig) => (
+                        <Controller
+                          key={fieldConfig.name}
+                          name={fieldConfig.name}
+                          control={control}
+                          rules={fieldConfig.rules}
+                          render={({ field, fieldState }) => (
+                            <Form.Item
+                              label={fieldConfig.label}
+                              className={[
+                                "search-form-item",
+                                fieldConfig.label &&
+                                  "search-form-item-labeled",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                              validateStatus={
+                                fieldState.invalid ? "error" : undefined
+                              }
+                              help={fieldState.error?.message}
+                            >
+                              {fieldConfig.render({
+                                field,
+                                fieldState,
+                                options: fieldConfig.options,
+                              })}
+                            </Form.Item>
+                          )}
+                        />
+                      ))}
+                    </Col>
+                  ))}
+                </Row>
+              </Col>
             ))}
           </Row>
 
           <div className="form-actions">
             <Button
               icon={<ReloadOutlined />}
-              onClick={handleReset}
+              onClick={resetSearchConditions}
               size="large"
             >
               초기화
@@ -723,51 +458,13 @@ function SearchFormContent({ onSearch, onSaveCondition }) {
         </section>
       )}
 
-      <Modal
-        title={
-          <Space>
-            <span className="modal-title-icon">
-              <SaveOutlined />
-            </span>
-            조회조건 저장 확인
-          </Space>
-        }
+      <SearchConditionSaveModal
         open={saveModalOpen}
-        onCancel={() => setSaveModalOpen(false)}
-        onOk={saveCondition}
-        okText="DB 저장"
-        cancelText="취소"
-        confirmLoading={isSaving}
-        okButtonProps={{ icon: <DatabaseOutlined /> }}
-        width={680}
-        destroyOnHidden
-      >
-        <div className="modal-content">
-          <Alert
-            type="info"
-            showIcon
-            message="현재 입력한 조건을 확인한 뒤 저장해 주세요."
-            description="저장된 조건은 사용자별 즐겨찾기 조회조건으로 연결할 수 있습니다."
-          />
-
-          <div className="condition-name-field">
-            <label htmlFor="condition-name">조회조건 이름</label>
-            <Input
-              id="condition-name"
-              value={conditionName}
-              onChange={(event) => setConditionName(event.target.value)}
-              onPressEnter={saveCondition}
-              placeholder="예: 이번 달 처리 대기 건"
-              maxLength={40}
-              showCount
-              autoFocus
-              size="large"
-            />
-          </div>
-
-          <SearchConditionSummary items={conditionSnapshot.displayValues} />
-        </div>
-      </Modal>
-    </>
+        snapshot={conditionSnapshot}
+        saving={isSaving}
+        onCancel={closeSaveModal}
+        onSave={saveCondition}
+      />
+    </FormProvider>
   );
 }

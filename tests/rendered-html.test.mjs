@@ -138,6 +138,7 @@ test("consumer declares only Group, Field, and existing Ant controls", async () 
   assert.match(conditionForm, /<FormProvider \{\.\.\.methods\}>/);
   assert.match(conditionForm, /<Controller/);
   assert.match(conditionForm, /cloneElement\(InputComponent/);
+  assert.match(conditionForm, /config\.getValueFromEvent/);
   assert.match(conditionForm, /components\.FormItem \?\? Form\.Item/);
   assert.match(conditionForm, /<RowComponent/);
   assert.match(conditionForm, /<ColComponent/);

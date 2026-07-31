@@ -193,6 +193,22 @@ conditionFormRef.current.openSaveModal();
 `StyledFormItem`과 `CompactFormItem`은 내부에서 Ant Design `Form.Item`을 반환하는
 기존 스타일 컴포넌트를 그대로 사용할 수 있습니다.
 
+표준 Ant 컴포넌트와 다른 `onChange` 구조를 가진 사내 컴포넌트도 필드 한 곳에서
+정규화할 수 있습니다.
+
+```jsx
+<ConditionField
+  name="employee"
+  defaultValue={null}
+  getValueFromEvent={(employee, meta) => ({
+    id: employee.id,
+    source: meta.source,
+  })}
+>
+  <EmployeePicker />
+</ConditionField>
+```
+
 ## 표시 규칙
 
 라벨이 있는 필드는 모달에서 독립된 행이 됩니다.

@@ -416,14 +416,14 @@ const currentValues = formRef.current.getValues();
   hydrate={(serverValue) => findOption(serverValue)}
   formatValue={(value) => value?.label}
   showWhen={(value) => Boolean(value)}
+  getValueFromEvent={(selectedItem) => selectedItem}
 >
   <CompanyCodePicker />
 </ConditionField>
 ```
 
 입력 컴포넌트의 `onChange` 첫 번째 인자가 실제 값이면 별도 연결이 필요 없습니다.
-이벤트 구조가 완전히 다를 때만 컴포넌트 자체에서 표준 값 또는 event.target.value를
-첫 번째 인자로 전달하도록 얇은 어댑터를 만듭니다.
+이벤트 구조가 완전히 다를 때만 `getValueFromEvent`로 RHF에 저장할 값을 반환합니다.
 
 ## 13. 마이그레이션 순서
 

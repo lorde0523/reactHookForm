@@ -67,7 +67,10 @@ function BoundConditionField({ config, control, FormItemComponent }) {
         const originalOnChange = InputComponent.props.onChange;
         const originalOnBlur = InputComponent.props.onBlur;
         const handleChange = (...args) => {
-          field.onChange(extractConditionValue(args, valuePropName));
+          const nextValue = config.getValueFromEvent
+            ? config.getValueFromEvent(...args)
+            : extractConditionValue(args, valuePropName);
+          field.onChange(nextValue);
           originalOnChange?.(...args);
         };
         const handleBlur = (...args) => {
